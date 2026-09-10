@@ -88,3 +88,5 @@ See [Architecture](docs/ARCHITECTURE.md), [SNMP behavior](docs/SNMP.md), [contro
 Use the one-host validation harness only for an explicitly authorized printer, capture diagnostics only when needed, sanitize the private capture, and turn each observed discrepancy into a reviewed vendor fixture and deterministic regression test. Central site-agent architecture and private vendor OIDs remain deferred.
 
 The first sanitized live fixture covers a FUJIFILM Apeos C3567 through the generic standard-MIB path. It validates identity, toner, drums, maintenance supplies, one alert, and a lifetime counter without introducing a FUJIFILM adapter or private enterprise-OID reads.
+
+A second sanitized fixture covers a Konica Minolta bizhub C3321i. Enterprise OID `18334` selects the existing adapter, while standard MIBs provide toner, imaging units, waste toner, fuser and transfer components, an alert, and the total counter. No private Konica Minolta OIDs are queried.

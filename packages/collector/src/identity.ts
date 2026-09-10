@@ -18,6 +18,11 @@ interface KnownManufacturer {
 
 const knownManufacturers: KnownManufacturer[] = [
   {
+    canonical: "Konica Minolta",
+    signal: /\bKONICA\s+MINOLTA\b/i,
+    leadingModelPrefix: /^KONICA\s+MINOLTA[\s:–—-]+/i
+  },
+  {
     canonical: "FUJIFILM",
     signal: /\bFUJIFILM\b/i,
     leadingModelPrefix: /^FUJIFILM[\s:–—-]+/i

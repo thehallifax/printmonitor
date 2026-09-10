@@ -51,4 +51,6 @@ A sanitized FUJIFILM Apeos C3567 capture validates the generic standard-MIB path
 
 The same evidence established two conservative supply rules: `Transfer Belt Cleaner` is classified as a transfer component rather than a fuser, and Printer-MIB special values remain raw without a synthesized percentage. Waste-container percentages still have no generic remaining-versus-full interpretation.
 
+A sanitized Konica Minolta bizhub C3321i capture validates enterprise-OID detection through root `18334`. Its generic identity evidence normalizes the model to `bizhub C3321i`, while the existing adapter supplies the canonical manufacturer. Standard MIBs expose toner, imaging units, waste toner, fuser and transfer components, one alert, and the total page count without private Konica Minolta OIDs. `Toner Filter` is treated as a neutral maintenance item rather than toner, while its standards-reported percentage is retained. Mono and colour counters are not yet available through the current generic collection path.
+
 See [Controlled live validation](LIVE_VALIDATION.md) for the approved one-host command and capture-to-fixture workflow. The automated tests never require or contact physical hardware.

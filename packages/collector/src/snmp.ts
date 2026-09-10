@@ -75,6 +75,7 @@ const pickColour = (description: string): string | undefined => ["black", "cyan"
 function supplyType(rawType: number | undefined, description: string): Consumable["type"] {
   if (rawType === 4 || /waste.*toner|toner.*waste/i.test(description)) return "waste-toner";
   if (rawType === 8 || /waste.*ink|ink.*waste/i.test(description)) return "waste-ink";
+  if (/\btoner filter\b/i.test(description)) return "other";
   if ([3, 21].includes(rawType ?? -1) || /toner/i.test(description)) return "toner";
   if ([5, 6].includes(rawType ?? -1) || /\bink\b/i.test(description)) return "ink";
   if (rawType === 9 || /\b(drum|imaging unit|photoconductor)\b/i.test(description)) return "drum";

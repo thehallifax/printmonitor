@@ -70,4 +70,4 @@ npm run fixture:sanitize -- \
 4. Search the result for real host/domain/IP/serial/MAC/organization fragments. Delete the candidate if review fails; fix the sanitizer or add redactions and regenerate with a new name.
 5. Add a deterministic regression test that loads the sanitized fixture and states the observed discrepancy.
 
-Prepared directories exist for Ricoh, Canon, Konica Minolta, Kyocera, and FUJIFILM. The FUJIFILM directory contains the first reviewed sanitized live fixture and exercises only the generic standard-MIB path. Do not add private OIDs until a reviewed fixture shows the standard MIB is insufficient and the private OID is documented with confidence.
+Prepared directories exist for Ricoh, Canon, Konica Minolta, Kyocera, and FUJIFILM. Reviewed sanitized live fixtures now cover FUJIFILM through the generic standard-MIB path and Konica Minolta through enterprise-OID adapter detection with standard-MIB collection. Do not add private OIDs until a reviewed fixture shows the standard MIB is insufficient and the private OID is documented with confidence.
