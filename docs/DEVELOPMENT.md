@@ -17,16 +17,16 @@ npm run demo:seed
 npm run dev
 ```
 
-Browse to <http://127.0.0.1:3000>. The API and static dashboard are served from the same origin. The browser refreshes stored fleet state every minute; this is an API read, not an SNMP poll.
+Browse to <http://127.0.0.1:3010>. The API and static dashboard are served from the same origin. The browser refreshes stored fleet state every minute; this is an API read, not an SNMP poll.
 
 To inspect endpoints:
 
 ```bash
-curl -s http://127.0.0.1:3000/api/health
-curl -s http://127.0.0.1:3000/api/fleet
-curl -s http://127.0.0.1:3000/api/printers
-curl -s http://127.0.0.1:3000/api/printers/example-campus-library/history?limit=10
-curl -s http://127.0.0.1:3000/api/runs
+curl -s http://127.0.0.1:3010/api/health
+curl -s http://127.0.0.1:3010/api/fleet
+curl -s http://127.0.0.1:3010/api/printers
+curl -s http://127.0.0.1:3010/api/printers/example-campus-library/history?limit=10
+curl -s http://127.0.0.1:3010/api/runs
 ```
 
 ## Configuration
@@ -39,7 +39,7 @@ Copy `.env.example` to `.env`, copy `config/inventory.example.yaml` to `config/i
 - `POLL_INTERVAL_SECONDS`: interval for collector `--watch` mode.
 - `SNMP_TIMEOUT_MS`, `SNMP_RETRIES`: bounded request behavior.
 - `COLLECTOR_CONCURRENCY`: maximum printers collected concurrently.
-- `HOST`, `PORT`: API listener. The application fallback is loopback port 3000; the deployment template uses loopback port 3010.
+- `HOST`, `PORT`: API listener. The documented application and deployment default is loopback port 3010.
 
 Do not put site-specific inventory or secrets in tracked files. The included inventory, addresses, communities, manufacturers, and serials are fictional.
 

@@ -45,7 +45,7 @@ The installed labels are:
 - `com.printer-fleet-monitor.web`
 - `com.printer-fleet-monitor.collector`
 
-Both agents use `RunAtLoad`, `KeepAlive`, a ten-second restart throttle, an explicit working directory, and the absolute Node executable discovered during installation. The plist files contain the `.env` path, never the SNMP community. Existing process-environment overrides retain precedence over `.env` values.
+Both agents use `RunAtLoad`, `KeepAlive`, a ten-second restart throttle, an explicit working directory, and the absolute Node executable discovered during installation. Their service entry points receive the same explicit project root used by installation and status, then load that root's `.env` through the shared deployment configuration code. Non-secret effective runtime settings are copied into the generated plist so an explicit install-time override remains effective; the SNMP community is never embedded and is loaded from `.env` at service start. Rerun `install.sh` after changing daemon configuration. Existing process-environment overrides retain precedence over `.env` values.
 
 Logs are append-only launchd stdout/stderr files under `data/log/`:
 

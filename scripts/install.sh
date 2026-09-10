@@ -42,7 +42,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "Would preserve existing .env, inventory, database, and logs."
   echo "Would run npm ci and npm run build."
   echo "Would install $WEB_LABEL and $COLLECTOR_LABEL in $LAUNCH_AGENT_DIRECTORY."
-  node "$PROJECT_ROOT/scripts/project-env.mjs" url
+  show_effective_configuration
   exit 0
 fi
 
@@ -62,7 +62,7 @@ fi
 npm ci
 npm run build
 
-if ! node "$PROJECT_ROOT/scripts/project-env.mjs" validate; then
+if ! node "$PROJECT_ROOT/scripts/project-env.mjs" validate "$PROJECT_ROOT"; then
   echo "Installation stopped before launchd changes. Update .env and config/inventory.yaml, then rerun this installer." >&2
   exit 1
 fi
@@ -84,5 +84,5 @@ launchctl bootstrap "gui/$(id -u)" "$WEB_PLIST"
 launchctl bootstrap "gui/$(id -u)" "$COLLECTOR_PLIST"
 
 echo "Printer Fleet Monitor services installed."
-node "$PROJECT_ROOT/scripts/project-env.mjs" url
+show_effective_configuration
 echo "Logs: $LOG_DIRECTORY"

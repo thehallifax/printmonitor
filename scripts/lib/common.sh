@@ -26,3 +26,21 @@ require_non_root() {
 service_target() {
   printf 'gui/%s/%s\n' "$(id -u)" "$1"
 }
+
+show_effective_configuration() {
+  node "$PROJECT_ROOT/scripts/project-env.mjs" describe "$PROJECT_ROOT"
+}
+
+load_installed_web_address() {
+  if [ ! -f "$WEB_PLIST" ] || [ ! -x /usr/libexec/PlistBuddy ]; then
+    return
+  fi
+  if [ "${HOST+x}" != x ]; then
+    installed_host=$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:HOST" "$WEB_PLIST" 2>/dev/null || true)
+    if [ -n "$installed_host" ]; then HOST=$installed_host; export HOST; fi
+  fi
+  if [ "${PORT+x}" != x ]; then
+    installed_port=$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:PORT" "$WEB_PLIST" 2>/dev/null || true)
+    if [ -n "$installed_port" ]; then PORT=$installed_port; export PORT; fi
+  fi
+}

@@ -14,4 +14,4 @@ if [ ! -f "$PROJECT_ROOT/apps/api/dist/server.js" ] || [ ! -f "$PROJECT_ROOT/pac
   exit 1
 fi
 
-exec "$(command -v node)" "$PROJECT_ROOT/scripts/run.mjs"
+exec "$(command -v node)" "$PROJECT_ROOT/scripts/run.mjs" "$PROJECT_ROOT"

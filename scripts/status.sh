@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIRECTORY/lib/common.sh"
 require_macos
+load_installed_web_address
 
 show_service() {
   name=$1
@@ -24,6 +25,6 @@ show_service() {
 
 show_service "Web/API" "$WEB_LABEL"
 show_service "Collector" "$COLLECTOR_LABEL"
-echo "Dashboard: $(node "$PROJECT_ROOT/scripts/project-env.mjs" url)"
+show_effective_configuration
 echo "Web logs: $LOG_DIRECTORY/web.stdout.log, $LOG_DIRECTORY/web.stderr.log"
 echo "Collector logs: $LOG_DIRECTORY/collector.stdout.log, $LOG_DIRECTORY/collector.stderr.log"
