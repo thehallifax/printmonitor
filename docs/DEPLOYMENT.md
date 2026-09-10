@@ -69,12 +69,12 @@ Run the upgrade as `cacheadmin`, from the existing checkout. Preserve local conf
 
 ```bash
 sudo -iu cacheadmin
-cd /absolute/path/to/printmonitor
+cd "/absolute/path/to/printmonitor"
 git status --short
 git pull --ff-only
 ```
 
-Confirm `.env` contains `INVENTORY_PATH=config/inventory.yaml`, `DATABASE_PATH`, `POLL_INTERVAL_SECONDS`, `HOST`, and the intended `PORT` (3010 for the current canary). Confirm `config/inventory.yaml` exists and contains the real hostname-only inventory. Then run:
+Confirm `.env` contains `INVENTORY_PATH=config/inventory.yaml`, `DATABASE_PATH`, `POLL_INTERVAL_SECONDS`, `HOST`, and the intended `PORT` (3010 is the documented default). Confirm `config/inventory.yaml` exists and contains the real hostname-only inventory. Then run:
 
 ```bash
 ./scripts/install.sh --dry-run

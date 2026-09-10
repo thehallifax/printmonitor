@@ -1,31 +1,54 @@
 # Printer Fleet Monitor
 
-Printer Fleet Monitor is a vendor-neutral, read-only monitoring foundation for network printers and multifunction devices. A background collector resolves configured hostnames, reads standard SNMP MIBs, normalizes the evidence, and writes observations to SQLite. The Fastify API and browser dashboard read only that stored state; opening the dashboard never contacts a printer.
+Printer Fleet Monitor is a small, vendor-neutral service for monitoring network printers and multifunction devices. A background collector reads configured hostnames over read-only SNMP, normalizes the results, and caches them in SQLite. The Fastify API and browser dashboard read that stored state only: viewing the dashboard never contacts a printer or starts a collection.
 
-## Current scope
+![Fleet dashboard populated with fictional demo printers](docs/images/fleet-dashboard.png)
 
-- Hostname-only YAML inventory with explicit stable printer IDs and early schema validation
-- DNS resolution at collection time, including the resolved address in telemetry
-- Generic SNMPv2c collector using SNMPv2-MIB, HOST-RESOURCES-MIB, and Printer-MIB
-- Manufacturer detection for Ricoh, Canon, Konica Minolta, and Kyocera behind an adapter registry
-- Conservative generic identity normalization for a validated FUJIFILM manufacturer signal
-- Shared normalized TypeScript contracts for identity, reachability, health, alerts, supplies, and counters
-- A persistent configured-printer catalogue, append-only observations, and a materialized latest-state table in SQLite
-- Explicit `pending` state for active printers that have never been collected
-- Stored-state Fastify API with filtering/history and a responsive dependency-free fleet/detail dashboard
-- Deterministic tests with mocks/fixtures only
-- Controlled one-host live-validation harness with optional private captures
-- Typed per-OID and failure evidence plus fixture sanitization tooling
+## What it monitors
 
-No device-changing operation is implemented. In particular, the codebase contains no SNMP SET call.
+- Reachability, health, freshness, and never-collected state as separate signals
+- Toner/ink and maintenance supplies, including unknown or device-specific raw levels
+- Active alerts, total page count, and recent collection history
+- Collection completeness, latency, failure evidence, and adapter selection
+- A compact fleet overview with searchable/filterable cards and a scroll-contained Printer Detail view
 
-## Requirements
+No device-changing operation is implemented. Collection is limited to SNMP GET and subtree reads; there is no SNMP SET path, browser-triggered polling, network scanning, or discovery.
 
-- Node.js 22.12 or newer
-- npm 10 or newer
-- Network/DNS access to devices only when intentionally running the live collector
+## Architecture
 
-## Quick start
+```text
+hostname-only inventory
+          │
+          ▼
+background collector ── DNS ── read-only SNMP GET/subtree
+          │
+          ▼
+        SQLite  ◄── Fastify API ◄── browser dashboard
+```
+
+Production inventory is hostname-first and DNS resolution is mandatory on every normal collection. Each printer also has a stable inventory ID so metadata can change without losing history. The collector stores append-only observations plus a materialized latest state; failed polls preserve clearly labelled last-known device data without rewriting history.
+
+Reachability answers whether the latest SNMP attempt received a response. Health describes the normalized condition of a responding device (`healthy`, `warning`, `critical`, or `unknown`). Freshness is independent of both. An active printer without any observation is `pending`, not offline.
+
+The supported single-node runtime is one collector writer and one API/web process sharing a local SQLite database. On macOS, launchd supervises them as independent services, so either can restart without coupling its lifecycle to the other. See [Architecture](docs/ARCHITECTURE.md) for the component and storage boundaries.
+
+## Vendor evidence
+
+The generic collector uses SNMPv2-MIB, HOST-RESOURCES-MIB, and Printer-MIB. Vendor adapters normalize standard evidence behind shared contracts; they do not currently add private enterprise-OID queries.
+
+| Vendor | Repository evidence |
+| --- | --- |
+| Konica Minolta | Sanitized fixture regressions for bizhub C3321i, C301i, C451i, and C251i; enterprise OID `18334` selects the adapter. |
+| FUJIFILM | Sanitized Apeos C3567 fixture through the generic standard-MIB path. |
+| Ricoh | Enterprise OID `367` adapter-detection and deterministic synthetic coverage. |
+| Canon | Enterprise OID `1602` adapter-detection and deterministic synthetic coverage. |
+| Kyocera | Enterprise OID `1347`/identity adapter-detection and deterministic synthetic coverage. |
+
+“Fixture” means sanitized evidence committed under `packages/collector/test/fixtures/`; it is not a claim that every model or firmware behaves identically.
+
+## Quick start on macOS
+
+Requirements: Node.js 22.12 or newer and npm 10 or newer.
 
 ```bash
 git clone https://github.com/thehallifax/printmonitor.git
@@ -36,9 +59,7 @@ cp config/inventory.example.yaml config/inventory.yaml
 ./scripts/install.sh
 ```
 
-The macOS installer verifies Node.js/npm, installs locked dependencies, builds the project, validates configuration, and installs separate launchd agents for the API/web process and collector. The deployment template uses <http://127.0.0.1:3010>; the installer and status command display the actual URL configured by `HOST` and `PORT`. Existing `.env`, inventory, database, and logs are never overwritten.
-
-Manage the installed services with:
+The installer validates configuration, installs locked dependencies, builds the project, and installs separate per-user launchd agents for the API/web process and collector. It is idempotent and never overwrites an existing `.env`, inventory, database, or log. The documented default is <http://127.0.0.1:3010>; installation and status output use the effective `HOST` and `PORT`.
 
 ```bash
 ./scripts/status.sh
@@ -46,9 +67,11 @@ Manage the installed services with:
 ./scripts/uninstall.sh
 ```
 
-Uninstall removes only the launchd definitions. Operator configuration, database, and logs remain in place. See [Deployment](docs/DEPLOYMENT.md) for launchd design, logs, upgrades, and troubleshooting.
+Uninstall removes only the launchd definitions. Operator configuration, SQLite data, and logs remain in place. See [Deployment](docs/DEPLOYMENT.md) for dry-run installation, service labels, log paths, upgrades, and troubleshooting.
 
-For a foreground run in one terminal:
+## Foreground mode
+
+Run both the API/web process and collector watch loop in one terminal without installing services:
 
 ```bash
 npm ci
@@ -56,30 +79,21 @@ npm run build
 ./scripts/run.sh
 ```
 
-`run.sh` loads the project `.env` without shell evaluation, starts the API/web and collector watch process, forwards termination signals, and shuts down both if either process exits. For development with fictional stored data instead of live collection, use `npm run demo:seed` followed by `npm run dev`; the demo uses reserved `.invalid` hostnames and RFC 5737 documentation addresses.
+`run.sh` safely parses the repository-root `.env` without shell evaluation, forwards `SIGINT`/`SIGTERM`, and stops the other child if either process exits. Exported environment variables override `.env`, which overrides documented defaults. All supported launch paths resolve relative inventory and database paths from the repository root.
 
-For development with reload:
+For a UI-only local demo with fictional stored records:
 
 ```bash
+npm ci
+npm run demo:seed
 npm run dev
 ```
 
-## Run the collector
+The demo uses `.invalid` hostnames, RFC 5737 documentation addresses, and `EXAMPLE-*` serials. It performs no network collection.
 
-Copy `.env.example` to `.env`, create `config/inventory.yaml` from `config/inventory.example.yaml`, and set the community to a read-only credential. Keep both files out of source control because they can contain site data or secrets. The committed template points `INVENTORY_PATH` at `config/inventory.yaml`; the example inventory is never an implicit production target.
+## Configuration and inventory
 
-```bash
-npm run collect             # one collection cycle
-npm run collect -- --watch  # repeat using POLL_INTERVAL_SECONDS
-```
-
-The API is a separate process and never initiates collection. In production, run one collector and one API/web process as separate supervised services sharing the same local SQLite database. Multiple simultaneous collectors are not supported.
-
-All supported launch paths load `.env` from the project root. Values already exported in the process environment take precedence, so one-off overrides such as `PORT=3020 npm start` remain supported. Relative inventory and database paths are evaluated from the project working directory; the provided scripts and launchd agents set that directory explicitly.
-
-Each inventory printer requires a stable lowercase `id` and DNS `hostname`. `displayName`, `location`, and `enabled` are optional; display name defaults to the canonical lowercase hostname and enabled defaults to true. The top-level site defaults to `default` when omitted. IDs and canonical hostnames must be unique, IP literals are rejected, and disabled entries remain stored but are not polled or treated as active failures. Entries removed during reconciliation are marked unconfigured rather than deleted, preserving history by stable ID. SNMP credentials belong only in the environment.
-
-Inventory reconciliation happens before collection. An active entry with no observation is returned as `operationalState: "pending"`, with unknown health, null reachability/provenance/collection time, empty telemetry, and `isStale: false`. A failed first attempt transitions it to offline with no successful-seen timestamp; failure after a success preserves last-known data and last-seen evidence.
+Keep `.env` and `config/inventory.yaml` out of source control: they can contain an SNMP credential and site-identifying data. Use a read-only SNMP community. `INVENTORY_PATH` must point to the operator inventory, not the committed example.
 
 ```yaml
 site: { id: example-campus, name: Example Campus }
@@ -91,61 +105,55 @@ printers:
     enabled: true
 ```
 
-Watch mode collects immediately, waits for completion, then schedules the next run using `POLL_INTERVAL_SECONDS`. This completion-based timer and a process-local run guard prevent overlapping cycles.
+Inventory targets must be DNS hostnames; IP literals, CIDRs, ranges, and wildcards are rejected. The explicit `--ip` live-validation option is diagnostic-only for one authorized device lacking usable DNS and never creates or modifies inventory. SNMP credentials are read from the environment and are not written to launchd plist files.
+
+Important settings are `SNMP_COMMUNITY`, `INVENTORY_PATH`, `DATABASE_PATH`, `POLL_INTERVAL_SECONDS`, `SNMP_TIMEOUT_MS`, `SNMP_RETRIES`, `COLLECTOR_CONCURRENCY`, `HOST`, and `PORT`. See [.env.example](.env.example) and [Development](docs/DEVELOPMENT.md) for bounds and precedence details.
+
+## Dashboard and detail
+
+Fleet cards show priority-ordered operational state, K/C/M/Y levels, concise maintenance and alert summaries, page count, and recency. Summary metrics and the State selector filter the already-loaded stored fleet; dashboard refreshes are API reads, not printer polls.
+
+Printer Detail exposes identity, reachability, health, completeness, all supply evidence, alerts, counters, and bounded recent history. The fictional example below includes toner, imaging-unit, and fuser evidence.
+
+![Printer Detail populated with fictional supply, alert, counter, and history evidence](docs/images/printer-detail.png)
 
 ## API
 
-- `GET /api/health` — API, database, and persisted collector heartbeat/run/next-poll status
+- `GET /api/health` — API, database, and collector runtime status
 - `GET /api/fleet` — fleet summary and current printer state
-- `GET /api/printers` — current catalogue-backed states with `search`, `site`, `location`, `health`, `state`, `reachable`, and `stale` filters
-- `GET /api/printers/:id` — one current stored printer state, or 404
+- `GET /api/printers` — current states with search and operational filters
+- `GET /api/printers/:id` — one current stored printer state
 - `GET /api/printers/:id/history?limit=25` — bounded recent history, capped at 100
-- `GET /api/runs` and `GET /api/runs/:id` — recent stored collection-run diagnostics
+- `GET /api/runs` and `GET /api/runs/:id` — collection-run diagnostics
 
-Stale state is independent of reachability and health. A state becomes stale when its latest attempt is older than `max(2 × POLL_INTERVAL_SECONDS, 300 seconds)`. The API exposes `isStale`, `staleSince`, and `ageSeconds`; it never changes stale data into critical health.
-
-The collector writes a heartbeat every 15 seconds. The API reports it as running only while the newest heartbeat is at most 45 seconds old; older unclosed rows are `stale`, and abandoned current-run/next-poll fields are not presented as active. Watch mode persists `nextScheduledRunAt` after each completed cycle.
-
-## Dashboard
-
-The dashboard is a dense, responsive fleet-at-a-glance view over canonically ordered stored state. It shows normal K/C/M/Y toner levels, concise maintenance and alert summaries, page counts, freshness, and immediate offline/health state. Cards open Printer Detail, which is the investigation surface for complete supplies, alerts, counters, timestamps, failure evidence, and history.
-
-Toner and ink use K/C/M/Y tiles in canonical black, cyan, magenta, and yellow order. Separate amber and red surrounding treatments indicate low and near-empty UI attention states, with text and accessible labels so meaning does not depend on colour. Missing or non-derivable percentages display as unknown (`—`), never as 0%. Site remains part of the backend contract but is intentionally omitted from the current single-site presentation. Missing locations render no placeholder.
-
-Fleet summary metrics are keyboard-accessible filters. State metrics synchronize with the State selector; Reachable, Low supplies, and Stale remain independent predicates. Counts continue to describe the current search context rather than collapsing to the selected metric. Clear Filters resets search and fleet predicates.
-
-## Commands
+## Useful commands
 
 ```bash
-npm test          # build, then run deterministic tests
-npm run build     # compile every TypeScript workspace
-npm run typecheck # project-reference typecheck
-npm run demo:seed # write fictional local records
-npm run dev       # run API and dashboard with reload
-npm start         # run compiled API and dashboard
-./scripts/run.sh  # run API/dashboard and collector together in the foreground
-npm run validate:printer -- --hostname <name> # one authorized read-only target
-npm run validate:printer -- --ip <IPv4>       # diagnostic-only; skips DNS
+npm test
+npm run typecheck
+npm run build
+npm audit
+npm run collect                         # one intentional collection cycle
+npm run collect -- --watch              # background-style watch loop
+npm run validate:printer -- --hostname <name>
+npm run validate:printer -- --ip <IPv4> # diagnostic-only; DNS is skipped
 ```
 
-See [Architecture](docs/ARCHITECTURE.md), [Deployment](docs/DEPLOYMENT.md), [SNMP behavior](docs/SNMP.md), [controlled live validation](docs/LIVE_VALIDATION.md), and [Development](docs/DEVELOPMENT.md).
+## Security model
+
+- Hostname-only production inventory and mandatory DNS resolution
+- Read-only SNMP GET/subtree surface with bounded timeout, retries, and concurrency
+- No scanning, discovery, traps, device writes, or browser-to-printer path
+- Credentials remain server-side and are excluded from generated service definitions and logs
+- Live validation is single-target and explicitly operator initiated; captures stay under ignored `data/private/live-validation/` until sanitized and reviewed
+
+See [SNMP behavior](docs/SNMP.md) and [controlled live validation](docs/LIVE_VALIDATION.md) for the exact collection and fixture workflow.
 
 ## Current limitations
 
-- SNMPv2c only; credentials are process-level configuration rather than a secret-store integration.
-- Generic standard-MIB collection only. Vendor adapters can augment normalized fields but currently identify and label vendors without querying private enterprise OIDs.
-- Printer alert descriptions are best-effort because implementations vary across devices.
-- Mono/colour page counters are not yet available through the generic collection path.
-- Collection reachability means a successful SNMP response, not independent ICMP/TCP reachability.
-- No authentication, notifications, network discovery, SNMP traps, or multi-site control plane yet.
-- One SQLite database is appropriate for the initial single-node deployment, not concurrent writers on multiple hosts.
-
-## Milestone 2 validation workflow
-
-Use the one-host validation harness only for an explicitly authorized printer, capture diagnostics only when needed, sanitize the private capture, and turn each observed discrepancy into a reviewed vendor fixture and deterministic regression test. Central site-agent architecture and private vendor OIDs remain deferred.
-
-The first sanitized live fixture covers a FUJIFILM Apeos C3567 through the generic standard-MIB path. It validates identity, toner, drums, maintenance supplies, one alert, and a lifetime counter without introducing a FUJIFILM adapter or private enterprise-OID reads.
-
-A second sanitized fixture covers a Konica Minolta bizhub C3321i. Enterprise OID `18334` selects the existing adapter, while standard MIBs provide toner, imaging units, waste toner, fuser and transfer components, an alert, and the total counter. No private Konica Minolta OIDs are queried.
-
-Further sanitized Konica Minolta fixtures cover the bizhub C301i, C451i, and C251i, including empty optional alert tables, sleep, developer and finisher supplies, and low-toner warning behavior. Optional tables that are empty or explicitly unsupported no longer make an otherwise successful collection partial.
+- SNMPv2c only; credentials are process-level configuration rather than secret-store integration.
+- Standard-MIB collection only; vendor adapters currently normalize/detect rather than query private OIDs.
+- Alert descriptions vary by implementation, and mono/colour counters are not yet available through the generic path.
+- SNMP response is the reachability signal; there is no independent ICMP/TCP probe.
+- No authentication, notifications, network discovery, traps, or multi-site control plane.
+- SQLite is intended for one local collector writer, not concurrent writers across hosts.
