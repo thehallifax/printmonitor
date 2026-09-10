@@ -89,9 +89,11 @@ The dashboard offers two presentations over the same stored, canonically ordered
 - **Operational** is the default status-first triage view, grouped by offline, critical, warning, pending, and healthy state.
 - **Compact** is a dense fleet overview intended for wide displays, with the full normal toner state visible on every card where available.
 
-The presentation switch is immediate, does not make a collection request, and is saved locally in the browser. Search, site, and state filters apply identically to both views. Both presentations collapse responsively for laptops, tablets, and phones.
+The presentation switch is immediate, does not make a collection request, and is saved locally in the browser. Search and state filters apply identically to both views; site remains part of the backend contract but is intentionally omitted from the current single-site presentation. Both views collapse responsively for laptops, tablets, and phones.
 
-Toner and ink use a shared K/C/M/Y visual in canonical black, cyan, magenta, and yellow order. The fill retains the consumable's identity colour; separate amber and red tile treatments indicate low and near-empty UI attention states, with text and accessible labels so meaning does not depend on colour. Missing or non-derivable percentages display as unknown (`—`), never as 0%. Maintenance supplies remain visible as attention summaries in Operational mode, concise counts in Compact mode, and complete evidence in printer detail.
+Compact toner and ink use K/C/M/Y tiles in canonical black, cyan, magenta, and yellow order. Operational supply attention uses explanatory horizontal rows with the same identity colours. Separate amber and red surrounding treatments indicate low and near-empty UI attention states, with text and accessible labels so meaning does not depend on colour. Missing or non-derivable percentages display as unknown (`—`), never as 0%. Maintenance supplies use neutral bars in Operational, concise counts in Compact, and complete evidence in printer detail.
+
+Fleet summary metrics are keyboard-accessible filters. State metrics synchronize with the State selector; Reachable, Low supplies, and Stale remain independent predicates. Counts continue to describe the current search context rather than collapsing to the selected metric. Clear Filters resets search and fleet predicates without changing the saved Operational/Compact preference.
 
 ## Commands
 

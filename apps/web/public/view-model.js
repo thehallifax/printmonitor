@@ -2,6 +2,7 @@ export const prioritizedHealthStates = ["offline", "critical", "warning", "pendi
 export const VIEW_MODES = ["operational", "compact"];
 export const DEFAULT_VIEW_MODE = "operational";
 export const VIEW_STORAGE_KEY = "printer-fleet-view";
+export const SUMMARY_FILTERS = ["reachable", "offline", "critical", "warning", "pending", "healthy", "low-supplies", "stale"];
 export const TONER_CHANNELS = [
   { key: "black", shortLabel: "K", label: "Black", colour: "#242b2d" },
   { key: "cyan", shortLabel: "C", label: "Cyan", colour: "#008ba8" },
@@ -42,6 +43,26 @@ export function tonerChannels(consumables) {
   });
 }
 
+export function supplyPresentation(supply) {
+  const channel = ["toner", "ink"].includes(supply.type) ? TONER_CHANNELS.find((item) => item.key === supply.colour?.toLowerCase()) : undefined;
+  const levelPercent = Number.isFinite(supply.levelPercent) ? supply.levelPercent : null;
+  return {
+    supply,
+    label: channel?.label ?? supply.description,
+    fillColour: channel?.colour ?? "#66757b",
+    isToner: Boolean(channel),
+    levelPercent,
+    displayValue: levelPercent == null ? "—" : `${levelPercent}%`,
+    attention: consumableAttention(levelPercent)
+  };
+}
+
+export function operationalSupplyRows(consumables) {
+  return consumables.map(supplyPresentation)
+    .filter((item) => ["low", "critical"].includes(item.attention))
+    .sort((a, b) => a.levelPercent - b.levelPercent);
+}
+
 export function maintenanceSummary(consumables) {
   const items = consumables.filter((item) => !["toner", "ink"].includes(item.type));
   return { count: items.length, attentionCount: items.filter((item) => consumableAttention(item.levelPercent) === "low" || consumableAttention(item.levelPercent) === "critical").length };
@@ -51,6 +72,36 @@ export function compactAlerts(alerts, maximum = 2) {
   const visibleLimit = alerts.length > maximum ? Math.max(0, maximum - 1) : maximum;
   const visible = alerts.slice(0, visibleLimit);
   return { visible, additional: Math.max(0, alerts.length - visible.length) };
+}
+
+export function toggleSummaryFilter(active, requested) {
+  if (!SUMMARY_FILTERS.includes(requested) || active === requested) return null;
+  return requested;
+}
+
+export function applySummaryFilter(printers, filter) {
+  if (!filter) return printers;
+  return printers.filter((printer) => {
+    if (filter === "reachable") return printer.reachability?.reachable === true;
+    if (filter === "low-supplies") return printer.consumables.some((item) => item.levelPercent != null && item.levelPercent <= 20);
+    if (filter === "stale") return printer.isStale;
+    return printer.operationalState === filter;
+  });
+}
+
+export function summarizeFleet(printers) {
+  const count = (predicate) => printers.filter(predicate).length;
+  return {
+    total: printers.length,
+    reachable: count((printer) => printer.reachability?.reachable === true),
+    offline: count((printer) => printer.operationalState === "offline"),
+    critical: count((printer) => printer.operationalState === "critical"),
+    warning: count((printer) => printer.operationalState === "warning"),
+    pending: count((printer) => printer.operationalState === "pending"),
+    healthy: count((printer) => printer.operationalState === "healthy"),
+    lowConsumables: count((printer) => printer.consumables.some((item) => item.levelPercent != null && item.levelPercent <= 20)),
+    stale: count((printer) => printer.isStale)
+  };
 }
 
 export function failureLabel(kind) {

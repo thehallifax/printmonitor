@@ -1,6 +1,5 @@
-import { compactAlerts, failureLabel, filterFleet, groupPrinters, loadViewMode, maintenanceSummary, persistViewMode, tonerChannels } from "./view-model.js";
+import { applySummaryFilter, compactAlerts, failureLabel, filterFleet, groupPrinters, loadViewMode, maintenanceSummary, operationalSupplyRows, persistViewMode, summarizeFleet, toggleSummaryFilter, tonerChannels } from "./view-model.js";
 
-const summaryKeys = ["total", "reachable", "offline", "critical", "warning", "pending", "healthy", "lowConsumables", "stale"];
 const template = document.querySelector("#printer-card-template");
 const compactTemplate = document.querySelector("#compact-card-template");
 const statusSections = {
@@ -15,8 +14,12 @@ const noResultsState = document.querySelector("#no-results-state");
 const errorState = document.querySelector("#error-state");
 const syncState = document.querySelector("#sync-state");
 const searchFilter = document.querySelector("#search-filter");
-const siteFilter = document.querySelector("#site-filter");
 const stateFilter = document.querySelector("#state-filter");
+const summaryButtons = [...document.querySelectorAll("[data-summary]")];
+const summaryAccessibleNames = {
+  reachable: "reachable", offline: "offline", critical: "critical", warning: "warning", pending: "pending", healthy: "healthy",
+  "low-supplies": "with low supplies", stale: "stale"
+};
 const detailDialog = document.querySelector("#printer-detail");
 const detailContent = document.querySelector("#detail-content");
 const operationalView = document.querySelector("#operational-view");
@@ -26,6 +29,7 @@ const viewButtons = [...document.querySelectorAll("[data-view]")];
 let fleetData = { summary: {}, printers: [] };
 const preferenceStorage = (() => { try { return window.localStorage; } catch { return null; } })();
 let viewMode = loadViewMode(preferenceStorage);
+let summaryFilter = null;
 
 function relativeTime(value) {
   if (!value) return "Never";
@@ -75,7 +79,7 @@ function cardFor(printer) {
   const health = printer.normalizedHealth;
   card.dataset.health = printer.operationalState;
   if (printer.reachability?.failureKind) card.dataset.failure = printer.reachability.failureKind;
-  card.querySelector(".location").textContent = [printer.site?.name, printer.identity.location].filter(Boolean).join(" · ") || "Unassigned location";
+  card.querySelector(".location").textContent = printer.identity.location || "Unassigned location";
   card.querySelector("h3").textContent = printer.identity.displayName || printer.identity.hostname;
   card.querySelector(".hostname").textContent = printer.identity.hostname;
   card.querySelector(".status-pill").textContent = pending ? "Pending" : printer.reachability.reachable ? health : failureLabel(printer.reachability.failureKind);
@@ -92,20 +96,22 @@ function cardFor(printer) {
     alertItems.slice(0, 2).forEach((alert) => alerts.append(element("p", alert.severity === "info" ? "informational" : "", alert.message)));
   }
 
-  const tonerAttention = tonerVisual(printer.consumables, { attentionOnly: true });
-  const maintenanceAttention = printer.consumables.filter((item) => !["toner", "ink"].includes(item.type) && item.levelPercent != null && item.levelPercent <= 20).sort((a, b) => a.levelPercent - b.levelPercent);
-  if (tonerAttention || maintenanceAttention.length) {
+  const attentionSupplies = operationalSupplyRows(printer.consumables);
+  if (attentionSupplies.length) {
     const supplies = card.querySelector(".supplies");
     supplies.hidden = false;
     supplies.querySelector(".mini-heading").textContent = printer.lastKnownData ? "Last-known supply attention" : "Supply attention";
     const list = supplies.querySelector(".supply-list");
-    if (tonerAttention) list.append(tonerAttention);
-    maintenanceAttention.slice(0, 3).forEach((supply) => {
-      const row = element("div", `supply-row ${supply.levelPercent <= 5 ? "critical" : "low"}`);
-      const name = element("span", "supply-name", supply.colour || supply.description);
+    attentionSupplies.slice(0, 4).forEach((presentation) => {
+      const row = element("div", `supply-row ${presentation.attention} ${presentation.isToner ? "toner" : "maintenance"}`);
+      row.setAttribute("aria-label", `${presentation.label}${presentation.isToner ? ` ${presentation.supply.type}` : ""}, ${presentation.levelPercent == null ? "unknown level" : `${presentation.levelPercent} percent`}, ${presentation.attention}`);
+      const name = element("span", "supply-name", presentation.label);
       const track = element("span", "supply-track");
-      const bar = element("span", "supply-bar"); bar.style.width = `${supply.levelPercent}%`; track.append(bar);
-      row.append(name, track, element("span", "supply-level", `${supply.levelPercent}%`)); list.append(row);
+      const bar = element("span", "supply-bar");
+      if (presentation.levelPercent != null) bar.style.width = `${Math.max(0, Math.min(100, presentation.levelPercent))}%`;
+      bar.style.backgroundColor = presentation.fillColour;
+      track.append(bar);
+      row.append(name, track, element("span", "supply-level", presentation.displayValue)); list.append(row);
     });
   }
 
@@ -123,7 +129,7 @@ function compactCardFor(printer) {
   const pending = printer.operationalState === "pending";
   card.dataset.health = printer.operationalState;
   card.setAttribute("aria-label", `Open details for ${printer.identity.displayName || printer.identity.hostname}, ${pending ? "pending, never collected" : printer.operationalState}`);
-  card.querySelector(".location").textContent = [printer.site?.name, printer.identity.location].filter(Boolean).join(" · ") || "Unassigned";
+  card.querySelector(".location").textContent = printer.identity.location || "Unassigned";
   card.querySelector("h3").textContent = printer.identity.displayName || printer.identity.hostname;
   card.querySelector(".status-pill").textContent = pending ? "Pending" : printer.reachability?.reachable ? printer.normalizedHealth : "Offline";
   card.querySelector(".compact-device").textContent = pending ? "Never collected" : [printer.identity.manufacturer, printer.identity.model].filter(Boolean).join(" · ") || "Device model unavailable";
@@ -156,7 +162,22 @@ function compactCardFor(printer) {
 }
 
 function renderFleet() {
-  const filtered = filterFleet(fleetData.printers, { search: searchFilter.value, site: siteFilter.value, state: stateFilter.value });
+  const contextPrinters = filterFleet(fleetData.printers, { search: searchFilter.value, site: "", state: "" });
+  const stateFiltered = filterFleet(contextPrinters, { search: "", site: "", state: stateFilter.value });
+  const filtered = applySummaryFilter(stateFiltered, summaryFilter);
+  const summary = summarizeFleet(contextPrinters);
+  summaryButtons.forEach((button) => {
+    const key = button.dataset.summary;
+    const count = key === "all" ? summary.total : key === "low-supplies" ? summary.lowConsumables : summary[key];
+    button.querySelector("strong").textContent = String(count ?? 0);
+    const active = key !== "all" && key === summaryFilter;
+    button.setAttribute("aria-pressed", String(active));
+    const printerNoun = count === 1 ? "printer" : "printers";
+    const accessibleLabel = key === "all" ? `Show all ${count} ${printerNoun}`
+      : key === "low-supplies" ? `Show ${count} ${printerNoun} with low supplies`
+        : `Show ${count} ${summaryAccessibleNames[key]} ${printerNoun}`;
+    button.setAttribute("aria-label", accessibleLabel);
+  });
   const grouped = groupPrinters(filtered);
   for (const [health, { section, grid }] of Object.entries(statusSections)) {
     grid.replaceChildren(...grouped[health].map(cardFor));
@@ -173,13 +194,6 @@ function setViewMode(value, persist = true) {
   compactView.hidden = viewMode !== "compact";
   viewButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === viewMode)));
   document.body.dataset.view = viewMode;
-}
-
-function populateSites(printers) {
-  const selected = siteFilter.value;
-  const sites = [...new Map(printers.map((printer) => [printer.site?.id, printer.site]).filter(([id]) => id)).values()].sort((a, b) => a.name.localeCompare(b.name));
-  siteFilter.replaceChildren(new Option("All sites", ""), ...sites.map((site) => new Option(site.name, site.id)));
-  siteFilter.value = sites.some((site) => site.id === selected) ? selected : "";
 }
 
 function factList(items) {
@@ -210,7 +224,7 @@ async function showDetails(id) {
     const badges = element("div", "state-badges"); badges.append(element("span", `status-pill ${printer.reachability && !printer.reachability.reachable ? "offline" : ""}`, pending ? "pending" : printer.reachability.reachable ? printer.normalizedHealth : "offline"));
     if (printer.isStale) badges.append(element("span", "stale-badge", "Stale"));
     if (printer.lastKnownData) badges.append(element("span", "last-known-badge", "Supplies and counters are last known"));
-    const identity = factList([["Hostname", printer.identity.hostname], ["Site", printer.site?.name], ["Location", printer.identity.location], ["Serial", printer.identity.serialNumber], ["Adapter", printer.provenance?.adapter]]);
+    const identity = factList([["Hostname", printer.identity.hostname], ["Location", printer.identity.location], ["Serial", printer.identity.serialNumber], ["Adapter", printer.provenance?.adapter]]);
     const current = factList([["State", pending ? "Never collected" : printer.operationalState], ["Reachability", pending ? "Not yet attempted" : printer.reachability.reachable ? "Reachable" : failureLabel(printer.reachability.failureKind)], ["Health", printer.normalizedHealth], ["Completeness", printer.provenance?.collectionStatus], ["Latest attempt", printer.reachability ? relativeTime(printer.reachability.lastAttempt) : "Never"], ["Last successful collection", relativeTime(printer.lastSuccessfulCollectionAt)], ["Last seen", printer.reachability ? relativeTime(printer.reachability.lastSeen) : "Never"], ["Collection duration", printer.collectionDurationMs == null ? undefined : `${printer.collectionDurationMs} ms`], ["Failure", printer.reachability?.failureReason]]);
     const supplies = detailTable(["Supply", "Category", "Level", "Raw"], printer.consumables.map((supply) => [supply.description, supply.type, supply.levelPercent == null ? "—" : `${supply.levelPercent}%`, supply.levelPercent == null ? `${supply.rawLevel ?? "?"} / ${supply.rawMaximum ?? "?"}` : "—"]));
     const toner = tonerVisual(printer.consumables) || element("p", "detail-empty", "Toner levels unavailable.");
@@ -232,8 +246,6 @@ async function loadFleet() {
     if (!response.ok || !healthResponse.ok) throw new Error(`HTTP ${response.ok ? healthResponse.status : response.status}`);
     fleetData = await response.json();
     const health = await healthResponse.json();
-    document.querySelectorAll("#summary-grid strong").forEach((node, index) => { node.textContent = String(fleetData.summary[summaryKeys[index]] ?? 0); });
-    populateSites(fleetData.printers);
     renderFleet();
     errorState.hidden = true;
     syncState.classList.remove("error");
@@ -248,9 +260,23 @@ async function loadFleet() {
   }
 }
 
-for (const control of [searchFilter, siteFilter, stateFilter]) control.addEventListener("input", renderFleet);
+searchFilter.addEventListener("input", renderFleet);
+stateFilter.addEventListener("input", () => { summaryFilter = null; renderFleet(); });
+summaryButtons.forEach((button) => button.addEventListener("click", () => {
+  const requested = button.dataset.summary;
+  if (requested === "all") {
+    summaryFilter = null;
+    stateFilter.value = "";
+  } else {
+    const previous = summaryFilter;
+    summaryFilter = toggleSummaryFilter(summaryFilter, requested);
+    if (["offline", "critical", "warning", "pending", "healthy"].includes(summaryFilter)) stateFilter.value = summaryFilter;
+    else if (summaryFilter || stateFilter.value === previous) stateFilter.value = "";
+  }
+  renderFleet();
+}));
 viewButtons.forEach((button) => button.addEventListener("click", () => setViewMode(button.dataset.view)));
-document.querySelector("#clear-filters").addEventListener("click", () => { searchFilter.value = ""; siteFilter.value = ""; stateFilter.value = ""; renderFleet(); });
+document.querySelector("#clear-filters").addEventListener("click", () => { searchFilter.value = ""; stateFilter.value = ""; summaryFilter = null; renderFleet(); });
 document.querySelector("#retry-button").addEventListener("click", loadFleet);
 document.querySelector(".dialog-close").addEventListener("click", () => detailDialog.close());
 detailDialog.addEventListener("click", (event) => { if (event.target === detailDialog) detailDialog.close(); });
