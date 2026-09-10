@@ -4,6 +4,7 @@ import type {
   CollectionIssueKind,
   Consumable,
   OidCollectionEvidence,
+  OidCollectionStatus,
   PrinterAlert,
   PrinterCounters,
   PrinterIdentity,
@@ -173,10 +174,10 @@ export function normalizeRawSnmp(identity: PrinterIdentity, raw: RawSnmpData, la
   if (printerStatus === 6) alerts.unshift({ severity: "critical", category: "status", message: "Printer reports stopped printing", rawCode: printerStatus });
   const lifeCounts = Object.values(raw.tables[OIDS.prtMarkerLifeCount] ?? {}).map(numberValue).filter((value): value is number => value !== undefined && value >= 0);
   const counters: PrinterCounters = { total: lifeCounts.length ? Math.max(...lifeCounts) : undefined };
-  const unavailable = raw.oidEvidence?.some((item) => item.status !== "succeeded") ?? false;
+  const failed = raw.oidEvidence?.some((item) => item.status === "failed") ?? false;
   const collectionIssues = [...(raw.issues ?? [])];
-  if (unavailable && !collectionIssues.some((issue) => issue.kind === "partial-response")) {
-    collectionIssues.push({ kind: "partial-response", message: "One or more standard OID reads failed or were unavailable" });
+  if (failed && !collectionIssues.some((issue) => issue.kind === "partial-response")) {
+    collectionIssues.push({ kind: "partial-response", message: "One or more standard OID reads failed" });
   }
   const standard: PrinterObservation = {
     identity: {
@@ -190,7 +191,7 @@ export function normalizeRawSnmp(identity: PrinterIdentity, raw: RawSnmpData, la
     consumables, alerts, counters, normalizedHealth: "unknown", collectedAt,
     provenance: {
       collector: "printer-fleet-collector", version: "0.2.0", adapter: "generic", protocol: "snmp-v2c",
-      collectionStatus: collectionIssues.length || unavailable ? "partial" : "complete",
+      collectionStatus: collectionIssues.length || failed ? "partial" : "complete",
       oidEvidence: raw.oidEvidence,
       issues: collectionIssues,
       rawEvidence: { standard: serializeRawSnmp(raw), genericIdentity, vendorDetection: detection }
@@ -231,7 +232,7 @@ function get(session: SnmpSession, requests: typeof scalarRequests, secret: stri
         evidence.push({ symbol, oid, operation: "get", status: "failed", valueCount: 0, issueKind: "malformed-response", message: "Expected varbind missing" });
         issues.push({ kind: "malformed-response", message: `Expected varbind missing for ${symbol}`, oid });
       } else if (snmp.isVarbindError(varbind as never)) {
-        evidence.push({ symbol, oid, operation: "get", status: "unavailable", valueCount: 0, message: snmp.varbindError(varbind as never) });
+        evidence.push({ symbol, oid, operation: "get", status: "unsupported", valueCount: 0, message: snmp.varbindError(varbind as never) });
       } else {
         values[oid] = varbind.value;
         evidence.push({ symbol, oid, operation: "get", status: "succeeded", valueCount: 1 });
@@ -245,6 +246,7 @@ function walk(session: SnmpSession, symbol: string, oid: string, secret: string)
   return new Promise((resolve) => {
     const values: Record<string, unknown> = {};
     const issues: CollectionIssue[] = [];
+    const unsupportedMessages: string[] = [];
     session.subtree(oid, 20, (varbinds) => {
       if (!Array.isArray(varbinds)) {
         issues.push({ kind: "malformed-response", message: `Malformed walk response for ${symbol}`, oid });
@@ -252,7 +254,8 @@ function walk(session: SnmpSession, symbol: string, oid: string, secret: string)
       }
       for (const varbind of varbinds) {
         if (!varbind || typeof varbind.oid !== "string" || typeof varbind.type !== "number") issues.push({ kind: "malformed-response", message: `Malformed varbind in ${symbol}`, oid });
-        else if (!snmp.isVarbindError(varbind as never)) values[varbind.oid] = varbind.value;
+        else if (snmp.isVarbindError(varbind as never)) unsupportedMessages.push(snmp.varbindError(varbind as never));
+        else values[varbind.oid] = varbind.value;
       }
     }, (error) => {
       if (error) {
@@ -262,13 +265,25 @@ function walk(session: SnmpSession, symbol: string, oid: string, secret: string)
       }
       const valueCount = Object.keys(values).length;
       const malformed = issues.some((issue) => issue.kind === "malformed-response");
+      const status = classifyWalkStatus(valueCount, unsupportedMessages.length > 0, malformed);
       resolve({
         values,
-        evidence: [{ symbol, oid, operation: "walk", status: malformed ? "failed" : valueCount ? "succeeded" : "unavailable", valueCount, issueKind: malformed ? "malformed-response" : undefined }],
+        evidence: [{
+          symbol, oid, operation: "walk", status, valueCount,
+          issueKind: malformed ? "malformed-response" : undefined,
+          message: status === "unsupported" ? unsupportedMessages[0]?.slice(0, 300) : undefined
+        }],
         issues
       });
     });
   });
+}
+
+export function classifyWalkStatus(valueCount: number, hasUnsupportedVarbind: boolean, malformed: boolean): OidCollectionStatus {
+  if (malformed) return "failed";
+  if (valueCount > 0) return "succeeded";
+  if (hasUnsupportedVarbind) return "unsupported";
+  return "empty";
 }
 
 export interface SnmpOptions { community: string; timeoutMs: number; retries: number; }

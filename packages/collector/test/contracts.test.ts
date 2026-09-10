@@ -46,6 +46,8 @@ describe("health normalization", () => {
     [base({ reachability: { reachable: false, lastAttempt: "2026-01-01T00:00:00.000Z" } }), "offline"],
     [base({ alerts: [{ severity: "critical", category: "printer", message: "Paper jam" }] }), "critical"],
     [base({ consumables: [{ type: "toner", description: "Black toner", levelPercent: 15 }] }), "warning"],
+    [base({ consumables: [{ type: "toner", description: "Yellow toner", levelPercent: 1 }] }), "warning"],
+    [base({ alerts: [{ severity: "info", category: "printer", message: "Sleep" }] }), "healthy"],
     [base({ consumables: [{ type: "toner", description: "Black toner", levelPercent: 75 }] }), "healthy"],
     [base(), "unknown"]
   ])("normalizes evidence to %s", (observation, expected) => expect(normalizeHealth(observation)).toBe(expected));

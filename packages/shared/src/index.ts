@@ -50,7 +50,7 @@ export interface PrinterCounters {
 }
 
 export type CollectionIssueKind = "dns" | "timeout" | "authentication" | "protocol" | "malformed-response" | "partial-response" | "network" | "unknown";
-export type OidCollectionStatus = "succeeded" | "unavailable" | "failed";
+export type OidCollectionStatus = "succeeded" | "empty" | "unsupported" | "failed";
 export interface OidCollectionEvidence {
   symbol: string;
   oid: string;
@@ -119,7 +119,7 @@ export function calculateConsumableLevelPercent(input: Pick<Consumable, "type" |
 
 export function normalizeHealth(input: Pick<PrinterObservation, "reachability" | "alerts" | "consumables">): NormalizedHealth {
   if (!input.reachability.reachable) return "offline";
-  if (input.alerts.some((alert) => alert.severity === "critical") || input.consumables.some((item) => item.levelPercent !== undefined && item.levelPercent <= 5)) return "critical";
+  if (input.alerts.some((alert) => alert.severity === "critical")) return "critical";
   if (input.alerts.some((alert) => alert.severity === "warning") || input.consumables.some((item) => item.levelPercent !== undefined && item.levelPercent <= 20)) return "warning";
   if (input.alerts.length > 0 || input.consumables.length > 0) return "healthy";
   return "unknown";

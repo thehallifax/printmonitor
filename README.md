@@ -90,3 +90,5 @@ Use the one-host validation harness only for an explicitly authorized printer, c
 The first sanitized live fixture covers a FUJIFILM Apeos C3567 through the generic standard-MIB path. It validates identity, toner, drums, maintenance supplies, one alert, and a lifetime counter without introducing a FUJIFILM adapter or private enterprise-OID reads.
 
 A second sanitized fixture covers a Konica Minolta bizhub C3321i. Enterprise OID `18334` selects the existing adapter, while standard MIBs provide toner, imaging units, waste toner, fuser and transfer components, an alert, and the total counter. No private Konica Minolta OIDs are queried.
+
+Further sanitized Konica Minolta fixtures cover the bizhub C301i, C451i, and C251i, including empty optional alert tables, sleep, developer and finisher supplies, and low-toner warning behavior. Optional tables that are empty or explicitly unsupported no longer make an otherwise successful collection partial.

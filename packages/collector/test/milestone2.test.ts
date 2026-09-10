@@ -4,7 +4,7 @@ import { calculateConsumableLevelPercent } from "@printer-fleet/shared";
 import { boundedInteger } from "../src/config.js";
 import { sanitizeCapture } from "../src/fixture-sanitizer.js";
 import { validateExplicitHostname } from "../src/inventory.js";
-import { classifySnmpError, normalizeRawSnmp, OIDS, type RawSnmpData } from "../src/snmp.js";
+import { classifySnmpError, classifyWalkStatus, normalizeRawSnmp, OIDS, type RawSnmpData } from "../src/snmp.js";
 import { applyVendorEnrichment, type VendorAdapter } from "../src/vendor.js";
 
 const identity = { inventoryId: "fixture-printer", hostname: "printer.example.invalid", displayName: "Fixture Printer", resolvedIp: "192.0.2.10" };
@@ -77,6 +77,21 @@ describe("failure and partial-response evidence", () => {
     expect(result.reachability.reachable).toBe(true);
     expect(result.provenance.collectionStatus).toBe("partial");
     expect(result.provenance.issues?.[0]?.kind).toBe("protocol");
+  });
+
+  it.each(["empty", "unsupported"] as const)("does not make an optional %s table partial", (status) => {
+    const raw = supplyRaw({ description: "Black toner", type: 3, unit: 19, maximum: 100, level: 80 });
+    raw.oidEvidence = [{ symbol: "prtAlertDescription", oid: OIDS.alertDescription, operation: "walk", status, valueCount: 0 }];
+    const result = normalizeRawSnmp(identity, raw, 8);
+    expect(result.provenance.collectionStatus).toBe("complete");
+    expect(result.provenance.issues).toEqual([]);
+  });
+
+  it("distinguishes populated, empty, unsupported, and malformed walk outcomes", () => {
+    expect(classifyWalkStatus(1, false, false)).toBe("succeeded");
+    expect(classifyWalkStatus(0, false, false)).toBe("empty");
+    expect(classifyWalkStatus(0, true, false)).toBe("unsupported");
+    expect(classifyWalkStatus(0, false, true)).toBe("failed");
   });
 });
 

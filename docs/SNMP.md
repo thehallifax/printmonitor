@@ -31,7 +31,7 @@ Every device is configured by hostname. Before each cycle the collector calls DN
 | Printer-MIB | `prtAlertCode` | `1.3.6.1.2.1.43.18.1.1.7` | Alert code |
 | Printer-MIB | `prtAlertDescription` | `1.3.6.1.2.1.43.18.1.1.8` | Alert text when implemented |
 
-Unsupported or error varbinds are ignored while other returned evidence is retained. Table walks are independent, so failure of one optional table does not discard successful tables.
+Unsupported or error varbinds are ignored while other returned evidence is retained. Table walks are independent, so failure of one optional table does not discard successful tables. Per-OID evidence distinguishes a populated successful read (`succeeded`), a successful walk with no rows (`empty`), an explicit SNMP unsupported/not-implemented varbind (`unsupported`), and a transport, protocol, or malformed-response failure (`failed`). Empty and unsupported optional tables do not make an otherwise successful collection partial; failed reads still do.
 
 ### Supply semantics
 
@@ -52,5 +52,7 @@ A sanitized FUJIFILM Apeos C3567 capture validates the generic standard-MIB path
 The same evidence established two conservative supply rules: `Transfer Belt Cleaner` is classified as a transfer component rather than a fuser, and Printer-MIB special values remain raw without a synthesized percentage. Waste-container percentages still have no generic remaining-versus-full interpretation.
 
 A sanitized Konica Minolta bizhub C3321i capture validates enterprise-OID detection through root `18334`. Its generic identity evidence normalizes the model to `bizhub C3321i`, while the existing adapter supplies the canonical manufacturer. Standard MIBs expose toner, imaging units, waste toner, fuser and transfer components, one alert, and the total page count without private Konica Minolta OIDs. `Toner Filter` is treated as a neutral maintenance item rather than toner, while its standards-reported percentage is retained. Mono and colour counters are not yet available through the current generic collection path.
+
+Additional sanitized captures cover the Konica Minolta bizhub C301i, C451i, and C251i across 16–20 reported supplies. The evidence includes developer cartridges, staple and saddle-staple cartridges, sleep, empty alert tables, low-toner notifications, and standard lifetime page counts. A reachable sleeping printer remains healthy. Low or near-empty consumables produce warning-level attention; a percentage alone does not establish that printing is blocked and therefore does not make a device critical. Critical health remains reserved for critical device/Printer-MIB evidence.
 
 See [Controlled live validation](LIVE_VALIDATION.md) for the approved one-host command and capture-to-fixture workflow. The automated tests never require or contact physical hardware.
