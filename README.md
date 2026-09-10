@@ -21,20 +21,42 @@ No device-changing operation is implemented. In particular, the codebase contain
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22.12 or newer
 - npm 10 or newer
 - Network/DNS access to devices only when intentionally running the live collector
 
-## Quick start with fictional data
+## Quick start
 
 ```bash
-npm install
-npm run build
-npm run demo:seed
-npm start
+git clone https://github.com/thehallifax/printmonitor.git
+cd printmonitor
+cp .env.example .env
+cp config/inventory.example.yaml config/inventory.yaml
+# Edit .env and config/inventory.yaml before continuing.
+./scripts/install.sh
 ```
 
-Open <http://127.0.0.1:3000>. The demo uses reserved `.invalid` hostnames and RFC 5737 documentation addresses; it never queries the network.
+The macOS installer verifies Node.js/npm, installs locked dependencies, builds the project, validates configuration, and installs separate launchd agents for the API/web process and collector. The deployment template uses <http://127.0.0.1:3010>; the installer and status command display the actual URL configured by `HOST` and `PORT`. Existing `.env`, inventory, database, and logs are never overwritten.
+
+Manage the installed services with:
+
+```bash
+./scripts/status.sh
+./scripts/restart.sh
+./scripts/uninstall.sh
+```
+
+Uninstall removes only the launchd definitions. Operator configuration, database, and logs remain in place. See [Deployment](docs/DEPLOYMENT.md) for launchd design, logs, upgrades, and troubleshooting.
+
+For a foreground run in one terminal:
+
+```bash
+npm ci
+npm run build
+./scripts/run.sh
+```
+
+`run.sh` loads the project `.env` without shell evaluation, starts the API/web and collector watch process, forwards termination signals, and shuts down both if either process exits. For development with fictional stored data instead of live collection, use `npm run demo:seed` followed by `npm run dev`; the demo uses reserved `.invalid` hostnames and RFC 5737 documentation addresses.
 
 For development with reload:
 
@@ -44,7 +66,7 @@ npm run dev
 
 ## Run the collector
 
-Copy `.env.example` to `.env`, create a local inventory based on `config/inventory.example.yaml`, and set the community to a read-only credential. Keep both files out of source control if they contain site data or secrets.
+Copy `.env.example` to `.env`, create `config/inventory.yaml` from `config/inventory.example.yaml`, and set the community to a read-only credential. Keep both files out of source control because they can contain site data or secrets. The committed template points `INVENTORY_PATH` at `config/inventory.yaml`; the example inventory is never an implicit production target.
 
 ```bash
 npm run collect             # one collection cycle
@@ -52,6 +74,8 @@ npm run collect -- --watch  # repeat using POLL_INTERVAL_SECONDS
 ```
 
 The API is a separate process and never initiates collection. In production, run one collector and one API/web process as separate supervised services sharing the same local SQLite database. Multiple simultaneous collectors are not supported.
+
+All supported launch paths load `.env` from the project root. Values already exported in the process environment take precedence, so one-off overrides such as `PORT=3020 npm start` remain supported. Relative inventory and database paths are evaluated from the project working directory; the provided scripts and launchd agents set that directory explicitly.
 
 Each inventory printer requires a stable lowercase `id` and DNS `hostname`. `displayName`, `location`, and `enabled` are optional; display name defaults to the canonical lowercase hostname and enabled defaults to true. The top-level site defaults to `default` when omitted. IDs and canonical hostnames must be unique, IP literals are rejected, and disabled entries remain stored but are not polled or treated as active failures. Entries removed during reconciliation are marked unconfigured rather than deleted, preserving history by stable ID. SNMP credentials belong only in the environment.
 
@@ -99,11 +123,12 @@ npm run typecheck # project-reference typecheck
 npm run demo:seed # write fictional local records
 npm run dev       # run API and dashboard with reload
 npm start         # run compiled API and dashboard
+./scripts/run.sh  # run API/dashboard and collector together in the foreground
 npm run validate:printer -- --hostname <name> # one authorized read-only target
 npm run validate:printer -- --ip <IPv4>       # diagnostic-only; skips DNS
 ```
 
-See [Architecture](docs/ARCHITECTURE.md), [SNMP behavior](docs/SNMP.md), [controlled live validation](docs/LIVE_VALIDATION.md), and [Development](docs/DEVELOPMENT.md).
+See [Architecture](docs/ARCHITECTURE.md), [Deployment](docs/DEPLOYMENT.md), [SNMP behavior](docs/SNMP.md), [controlled live validation](docs/LIVE_VALIDATION.md), and [Development](docs/DEVELOPMENT.md).
 
 ## Current limitations
 

@@ -2,8 +2,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
+config/inventory.yaml
 data/*.sqlite
 data/*.sqlite-*
+data/log/
 data/private/
 coverage/
 .DS_Store

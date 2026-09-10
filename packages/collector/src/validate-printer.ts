@@ -1,9 +1,11 @@
-import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadSnmpOptions } from "./config.js";
 import { classifySnmpError, collectGenericSnmp, SnmpCollectionError } from "./snmp.js";
 import { parseValidationArguments, resolveValidationTarget, VALIDATION_USAGE } from "./validation-target.js";
+import { loadProjectEnvironment } from "./project-env.js";
+
+loadProjectEnvironment();
 
 function printOidSummary(evidence: NonNullable<Awaited<ReturnType<typeof collectGenericSnmp>>["provenance"]["oidEvidence"]>): void {
   console.log("\nStandard OID results");

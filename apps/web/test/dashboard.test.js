@@ -124,6 +124,14 @@ describe("consolidated fleet dashboard", () => {
     expect(source).toContain('"Current state"');
     expect(source).toContain('"Recent history"');
   });
+
+  it("ties scroll restoration to the dialog close lifecycle for every close path", () => {
+    const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
+    expect(source).toContain("detailScrollLock.lock()");
+    expect(source).toContain('detailDialog.addEventListener("close", () => detailScrollLock.unlock())');
+    expect(css).toContain("overscroll-behavior: contain");
+  });
 });
 
 describe("summary tile filtering", () => {

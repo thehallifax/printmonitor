@@ -1,11 +1,13 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { FleetDatabase } from "@printer-fleet/storage";
 import { boundedInteger, loadSnmpOptions, SAFETY_LIMITS } from "./config.js";
 import { loadInventory } from "./inventory.js";
 import { collectFleet } from "./runner.js";
+import { loadProjectEnvironment } from "./project-env.js";
 
-const inventoryPath = process.env.INVENTORY_PATH ?? "config/inventory.example.yaml";
+loadProjectEnvironment();
+
+const inventoryPath = process.env.INVENTORY_PATH ?? "config/inventory.yaml";
 const databasePath = process.env.DATABASE_PATH ?? "data/printer-fleet.sqlite";
 const inventory = await loadInventory(inventoryPath);
 const db = new FleetDatabase(databasePath);

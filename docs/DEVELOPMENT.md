@@ -31,7 +31,7 @@ curl -s http://127.0.0.1:3000/api/runs
 
 ## Configuration
 
-Copy `.env.example` to `.env` and override values locally:
+Copy `.env.example` to `.env`, copy `config/inventory.example.yaml` to `config/inventory.yaml`, and override values locally. Supported commands load the project-root `.env` even when their compiled entry point lives in a workspace package. An already-exported environment variable overrides the corresponding `.env` value.
 
 - `SNMP_COMMUNITY`: required only by the live collector; must be read-only.
 - `INVENTORY_PATH`: YAML inventory path.
@@ -39,9 +39,11 @@ Copy `.env.example` to `.env` and override values locally:
 - `POLL_INTERVAL_SECONDS`: interval for collector `--watch` mode.
 - `SNMP_TIMEOUT_MS`, `SNMP_RETRIES`: bounded request behavior.
 - `COLLECTOR_CONCURRENCY`: maximum printers collected concurrently.
-- `HOST`, `PORT`: API listener. The default binds only to loopback.
+- `HOST`, `PORT`: API listener. The application fallback is loopback port 3000; the deployment template uses loopback port 3010.
 
 Do not put site-specific inventory or secrets in tracked files. The included inventory, addresses, communities, manufacturers, and serials are fictional.
+
+`INVENTORY_PATH` must name the operator inventory (`config/inventory.yaml` in the template), not `config/inventory.example.yaml`. This prevents a copied `.env` from silently collecting against the fictional example inventory. Relative paths are anchored by the project working directory, which all service scripts set explicitly.
 
 Safety caps are enforced even when environment values are misconfigured: timeout 100–30,000 ms, retries 0–5, concurrency 1–32, and watch interval 10–86,400 seconds.
 

@@ -1,4 +1,5 @@
 import { applySummaryFilter, compactAlerts, displayLocation, failureLabel, filterFleet, maintenanceSummary, summarizeFleet, toggleSummaryFilter, tonerChannels } from "./view-model.js";
+import { createPageScrollLock } from "./modal-scroll-lock.js";
 
 const compactTemplate = document.querySelector("#compact-card-template");
 const emptyState = document.querySelector("#empty-state");
@@ -14,6 +15,7 @@ const summaryAccessibleNames = {
 };
 const detailDialog = document.querySelector("#printer-detail");
 const detailContent = document.querySelector("#detail-content");
+const detailScrollLock = createPageScrollLock();
 const compactGrid = document.querySelector("#compact-grid");
 let fleetData = { summary: {}, printers: [] };
 let summaryFilter = null;
@@ -139,7 +141,9 @@ function detailTable(headers, rows) {
 
 async function showDetails(id) {
   detailContent.replaceChildren(element("p", "detail-loading", "Loading stored printer details…"));
-  detailDialog.showModal();
+  detailScrollLock.lock();
+  try { detailDialog.showModal(); }
+  catch (error) { detailScrollLock.unlock(); throw error; }
   try {
     const [detailResponse, historyResponse] = await Promise.all([fetch(`/api/printers/${encodeURIComponent(id)}`), fetch(`/api/printers/${encodeURIComponent(id)}/history?limit=30`)]);
     if (!detailResponse.ok || !historyResponse.ok) throw new Error("Stored detail is unavailable");
@@ -205,5 +209,6 @@ document.querySelector("#clear-filters").addEventListener("click", () => { searc
 document.querySelector("#retry-button").addEventListener("click", loadFleet);
 document.querySelector(".dialog-close").addEventListener("click", () => detailDialog.close());
 detailDialog.addEventListener("click", (event) => { if (event.target === detailDialog) detailDialog.close(); });
+detailDialog.addEventListener("close", () => detailScrollLock.unlock());
 loadFleet();
 setInterval(loadFleet, 60_000);

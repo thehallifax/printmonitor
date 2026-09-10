@@ -89,4 +89,6 @@ The storage layer applies one canonical order before API delivery: offline, crit
 
 The Fastify process imports storage and shared contracts, not the collector. Health, fleet, detail, history, and run endpoints are parameterized stored reads and cannot initiate DNS or SNMP work.
 
+On macOS, production supervision uses two independent per-user launchd agents. Each agent has its own `RunAtLoad`/`KeepAlive` lifecycle, absolute Node entry point, explicit project working directory, and stdout/stderr files under `data/log/`. Both load the same project-root `.env`; service definitions contain only its path, not SNMP credentials. A failure or restart of one agent does not couple the other agent's lifecycle.
+
 The static browser client renders one dense, responsive fleet-at-a-glance grid from the canonically ordered `/api/fleet` response. Cards show normalized K/C/M/Y percentages and concise operational summaries; Printer Detail is the investigation surface for complete supplies, alerts, counters, timestamps, failure evidence, and history. Summary controls filter already-loaded client state, and independent stale and low-supply predicates do not change health. Site remains in API/storage contracts but is omitted from the single-site UI.
