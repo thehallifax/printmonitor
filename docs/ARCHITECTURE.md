@@ -88,3 +88,5 @@ Each collector process generates an ephemeral instance ID, persists startup and 
 The storage layer applies one canonical order before API delivery: offline, critical, warning, pending, healthy, then unknown. Within a priority group stale entries come first, followed by display name or hostname. The browser preserves this order while grouping and filtering.
 
 The Fastify process imports storage and shared contracts, not the collector. Health, fleet, detail, history, and run endpoints are parameterized stored reads and cannot initiate DNS or SNMP work.
+
+The static browser client renders two presentations from the same `/api/fleet` response and ordering: an explanatory Operational grouping and a dense Compact grid. View selection is browser-local preference only. A shared toner renderer consumes normalized percentages without deriving values from raw Printer-MIB evidence; maintenance and complete raw supply evidence remain separate from the primary K/C/M/Y display.

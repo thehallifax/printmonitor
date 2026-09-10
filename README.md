@@ -82,6 +82,17 @@ Stale state is independent of reachability and health. A state becomes stale whe
 
 The collector writes a heartbeat every 15 seconds. The API reports it as running only while the newest heartbeat is at most 45 seconds old; older unclosed rows are `stale`, and abandoned current-run/next-poll fields are not presented as active. Watch mode persists `nextScheduledRunAt` after each completed cycle.
 
+## Dashboard presentations
+
+The dashboard offers two presentations over the same stored, canonically ordered fleet state:
+
+- **Operational** is the default status-first triage view, grouped by offline, critical, warning, pending, and healthy state.
+- **Compact** is a dense fleet overview intended for wide displays, with the full normal toner state visible on every card where available.
+
+The presentation switch is immediate, does not make a collection request, and is saved locally in the browser. Search, site, and state filters apply identically to both views. Both presentations collapse responsively for laptops, tablets, and phones.
+
+Toner and ink use a shared K/C/M/Y visual in canonical black, cyan, magenta, and yellow order. The fill retains the consumable's identity colour; separate amber and red tile treatments indicate low and near-empty UI attention states, with text and accessible labels so meaning does not depend on colour. Missing or non-derivable percentages display as unknown (`—`), never as 0%. Maintenance supplies remain visible as attention summaries in Operational mode, concise counts in Compact mode, and complete evidence in printer detail.
+
 ## Commands
 
 ```bash

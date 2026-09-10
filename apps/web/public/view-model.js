@@ -1,4 +1,57 @@
 export const prioritizedHealthStates = ["offline", "critical", "warning", "pending", "healthy"];
+export const VIEW_MODES = ["operational", "compact"];
+export const DEFAULT_VIEW_MODE = "operational";
+export const VIEW_STORAGE_KEY = "printer-fleet-view";
+export const TONER_CHANNELS = [
+  { key: "black", shortLabel: "K", label: "Black", colour: "#242b2d" },
+  { key: "cyan", shortLabel: "C", label: "Cyan", colour: "#008ba8" },
+  { key: "magenta", shortLabel: "M", label: "Magenta", colour: "#b62067" },
+  { key: "yellow", shortLabel: "Y", label: "Yellow", colour: "#d6a900" }
+];
+
+// Presentation-only attention levels. The 20% low threshold matches normalized
+// health policy; 5% is the dashboard's existing stronger near-empty treatment.
+export function consumableAttention(levelPercent) {
+  if (levelPercent == null || !Number.isFinite(levelPercent)) return "unknown";
+  if (levelPercent <= 5) return "critical";
+  if (levelPercent <= 20) return "low";
+  return "normal";
+}
+
+export function normalizeViewMode(value) {
+  return VIEW_MODES.includes(value) ? value : DEFAULT_VIEW_MODE;
+}
+
+export function loadViewMode(storage) {
+  try { return normalizeViewMode(storage?.getItem(VIEW_STORAGE_KEY)); }
+  catch { return DEFAULT_VIEW_MODE; }
+}
+
+export function persistViewMode(storage, value) {
+  const mode = normalizeViewMode(value);
+  try { storage?.setItem(VIEW_STORAGE_KEY, mode); } catch { /* preferences are optional */ }
+  return mode;
+}
+
+export function tonerChannels(consumables) {
+  return TONER_CHANNELS.flatMap((channel) => {
+    const supply = consumables.find((item) => ["toner", "ink"].includes(item.type) && item.colour?.toLowerCase() === channel.key);
+    if (!supply) return [];
+    const levelPercent = Number.isFinite(supply.levelPercent) ? supply.levelPercent : null;
+    return [{ ...channel, supply, levelPercent, displayValue: levelPercent == null ? "—" : `${levelPercent}%`, attention: consumableAttention(levelPercent) }];
+  });
+}
+
+export function maintenanceSummary(consumables) {
+  const items = consumables.filter((item) => !["toner", "ink"].includes(item.type));
+  return { count: items.length, attentionCount: items.filter((item) => consumableAttention(item.levelPercent) === "low" || consumableAttention(item.levelPercent) === "critical").length };
+}
+
+export function compactAlerts(alerts, maximum = 2) {
+  const visibleLimit = alerts.length > maximum ? Math.max(0, maximum - 1) : maximum;
+  const visible = alerts.slice(0, visibleLimit);
+  return { visible, additional: Math.max(0, alerts.length - visible.length) };
+}
 
 export function failureLabel(kind) {
   return ({

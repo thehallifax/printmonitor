@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Read-only operational status for a network printer fleet.">
     <title>Printer Fleet Monitor</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" type="module"></script>
   </head>
@@ -36,6 +37,11 @@
         <label>Site<select id="site-filter"><option value="">All sites</option></select></label>
         <label>State<select id="state-filter"><option value="">All states</option><option value="offline">Offline</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="pending">Pending</option><option value="healthy">Healthy</option><option value="unknown">Unknown</option><option value="stale">Stale</option><option value="reachable">Reachable</option></select></label>
         <button type="button" id="clear-filters">Clear filters</button>
+        <fieldset class="view-switcher" aria-label="Fleet presentation">
+          <legend>Presentation</legend>
+          <button type="button" data-view="operational" aria-pressed="true">Operational</button>
+          <button type="button" data-view="compact" aria-pressed="false">Compact</button>
+        </fieldset>
       </section>
 
       <div id="error-state" class="error-state" role="alert" hidden>
@@ -44,6 +50,7 @@
         <button type="button" id="retry-button">Retry now</button>
       </div>
 
+      <div id="operational-view">
       <section class="fleet-section" id="offline-section" hidden>
         <div class="section-heading">
           <div><span class="section-kicker attention">Connectivity</span><h2>Offline</h2></div>
@@ -83,6 +90,11 @@
         </div>
         <div class="card-grid" id="healthy-grid"></div>
       </section>
+      </div>
+
+      <section id="compact-view" aria-label="Compact fleet view" hidden>
+        <div class="compact-grid" id="compact-grid"></div>
+      </section>
       <div class="empty-state" id="empty-state" hidden><strong>No active configured printers</strong><span>Load a validated inventory or the fictional demo data to populate this dashboard.</span></div>
       <div class="empty-state" id="no-results-state" hidden><strong>No printers match these filters</strong><span>Clear or adjust the fleet filters.</span></div>
     </main>
@@ -103,6 +115,17 @@
         <div class="supplies" hidden><p class="mini-heading">Supplies</p><div class="supply-list"></div></div>
         <div class="card-footer"><span class="reachability"></span><time></time></div>
         <div class="card-actions"><span class="page-count"></span><button type="button" class="detail-button">View details</button></div>
+      </article>
+    </template>
+
+    <template id="compact-card-template">
+      <article class="compact-card" role="button" tabindex="0">
+        <div class="compact-card-heading"><div><p class="location"></p><h3></h3></div><span class="status-pill"></span></div>
+        <p class="compact-device"></p>
+        <p class="compact-target"></p>
+        <div class="compact-toner"></div>
+        <div class="compact-alerts" hidden></div>
+        <div class="compact-meta"><span class="page-count"></span><span class="last-seen"></span></div>
       </article>
     </template>
 
