@@ -1,0 +1,14 @@
+site:
+  id: example-campus
+  name: Example Campus
+
+printers:
+  - hostname: printer-library.example.invalid
+    displayName: Library Printer
+    location: Library
+    enabled: true
+
+  - hostname: printer-office.example.invalid
+    displayName: Office Printer
+    location: Administration
+    enabled: false

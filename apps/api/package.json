@@ -1,0 +1,15 @@
+{
+  "name": "@printer-fleet/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": { "build": "tsc -b" },
+  "dependencies": {
+    "@fastify/static": "latest",
+    "@printer-fleet/shared": "*",
+    "@printer-fleet/storage": "*",
+    "dotenv": "latest",
+    "fastify": "latest"
+  }
+}

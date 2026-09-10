@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Read-only operational status for a network printer fleet.">
+    <title>Printer Fleet Monitor</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="brand-copy">
+        <h1>Printer Fleet Monitor</h1>
+        <p>Live state from the most recent background collection</p>
+      </div>
+      <div class="sync-state" id="sync-state"><span class="sync-dot"></span><span>Loading fleet</span></div>
+    </header>
+
+    <main>
+      <section class="summary-grid" aria-label="Fleet summary" id="summary-grid">
+        <article class="summary primary"><span>Printers</span><strong>—</strong></article>
+        <article class="summary"><span>Reachable</span><strong>—</strong></article>
+        <article class="summary danger"><span>Offline</span><strong>—</strong></article>
+        <article class="summary danger"><span>Critical</span><strong>—</strong></article>
+        <article class="summary warning"><span>Warnings</span><strong>—</strong></article>
+        <article class="summary warning"><span>Low supplies</span><strong>—</strong></article>
+      </section>
+
+      <div id="error-state" class="error-state" role="alert" hidden>
+        <strong>Fleet data is unavailable</strong>
+        <span>The dashboard could not read the stored state. It will retry shortly.</span>
+        <button type="button" id="retry-button">Retry now</button>
+      </div>
+
+      <section class="fleet-section" id="offline-section" hidden>
+        <div class="section-heading">
+          <div><span class="section-kicker attention">Connectivity</span><h2>Offline</h2></div>
+          <p>Devices that did not answer the latest DNS or SNMP collection attempt.</p>
+        </div>
+        <div class="card-grid" id="offline-grid"></div>
+      </section>
+
+      <section class="fleet-section" id="critical-section" hidden>
+        <div class="section-heading">
+          <div><span class="section-kicker attention">Immediate action</span><h2>Critical</h2></div>
+          <p>Reachable devices reporting an operational condition that can stop printing.</p>
+        </div>
+        <div class="card-grid" id="critical-grid"></div>
+      </section>
+
+      <section class="fleet-section" id="warning-section" hidden>
+        <div class="section-heading">
+          <div><span class="section-kicker warning-kicker">Plan attention</span><h2>Warnings</h2></div>
+          <p>Reachable devices with low supplies or another non-critical warning.</p>
+        </div>
+        <div class="card-grid" id="warning-grid"></div>
+      </section>
+
+      <section class="fleet-section">
+        <div class="section-heading">
+          <div><span class="section-kicker">Operational</span><h2>Fleet</h2></div>
+          <p>Healthy devices and reachable devices awaiting enough evidence for a health assessment.</p>
+        </div>
+        <div class="card-grid" id="fleet-grid"></div>
+        <div class="empty-state" id="empty-state" hidden><strong>No collected printer state yet</strong><span>Run the collector or load the fictional demo data to populate this dashboard.</span></div>
+      </section>
+    </main>
+
+    <template id="printer-card-template">
+      <article class="printer-card">
+        <div class="card-accent"></div>
+        <div class="card-header">
+          <div><p class="location"></p><h3></h3><p class="hostname"></p></div>
+          <span class="status-pill"></span>
+        </div>
+        <dl class="device-facts">
+          <div><dt>Device</dt><dd class="device"></dd></div>
+          <div><dt>Resolved IP</dt><dd class="ip"></dd></div>
+        </dl>
+        <div class="alerts" hidden></div>
+        <div class="supplies" hidden><p class="mini-heading">Supplies</p><div class="supply-list"></div></div>
+        <div class="card-footer"><span class="reachability"></span><time></time></div>
+      </article>
+    </template>
+  </body>
+</html>

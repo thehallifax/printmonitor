@@ -1,0 +1,27 @@
+{
+  "name": "printer-fleet-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -b --pretty false",
+    "test": "npm run build && vitest run",
+    "test:watch": "vitest",
+    "collect": "tsx packages/collector/src/cli.ts",
+    "validate:printer": "tsx packages/collector/src/validate-printer.ts",
+    "fixture:sanitize": "tsx packages/collector/src/sanitize-fixture.ts",
+    "demo:seed": "tsx packages/storage/src/seed-demo.ts",
+    "dev": "tsx watch apps/api/src/server.ts",
+    "start": "node apps/api/dist/server.js"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "latest",
+    "@types/net-snmp": "latest",
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
