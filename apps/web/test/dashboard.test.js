@@ -1,22 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { applySummaryFilter, compactAlerts, consumableAttention, failureLabel, filterFleet, groupPrinters, loadViewMode, maintenanceSummary, operationalSupplyRows, persistViewMode, summarizeFleet, supplyPresentation, toggleSummaryFilter, tonerChannels, VIEW_STORAGE_KEY } from "../public/view-model.js";
+import { applySummaryFilter, compactAlerts, consumableAttention, displayLocation, failureLabel, filterFleet, maintenanceSummary, summarizeFleet, toggleSummaryFilter, tonerChannels } from "../public/view-model.js";
 
 const printer = (name, normalizedHealth, reachable = true, operationalState = reachable ? normalizedHealth : "offline") => ({ identity: { displayName: name, hostname: `${name}.example.invalid` }, site: { id: "site", name: "Site" }, normalizedHealth, operationalState, reachability: { reachable }, consumables: [], isStale: false });
 
-describe("dashboard status sections", () => {
-  it("keeps offline, critical, warning, and fleet devices separate", () => {
-    const groups = groupPrinters([
-      printer("Healthy", "healthy"), printer("Warning", "warning"), printer("Offline", "offline"),
-      printer("Critical", "critical"), printer("Pending", "unknown", true, "pending"), printer("Unknown", "unknown"), printer("Disconnected", "unknown", false)
-    ]);
-    expect(groups.offline.map((item) => item.identity.displayName)).toEqual(["Offline", "Disconnected"]);
-    expect(groups.critical.map((item) => item.identity.displayName)).toEqual(["Critical"]);
-    expect(groups.warning.map((item) => item.identity.displayName)).toEqual(["Warning"]);
-    expect(groups.pending.map((item) => item.identity.displayName)).toEqual(["Pending"]);
-    expect(groups.healthy.map((item) => item.identity.displayName)).toEqual(["Healthy", "Unknown"]);
-  });
-
+describe("dashboard state contracts", () => {
   it("distinguishes DNS and SNMP timeout failures from critical health", () => {
     expect(failureLabel("dns")).toBe("DNS failure");
     expect(failureLabel("timeout")).toBe("SNMP timeout");
@@ -32,38 +20,9 @@ describe("dashboard status sections", () => {
   it("keeps pending distinct and stale independent from health", () => {
     const pending = { ...printer("Pending", "unknown", true, "pending"), reachability: null, isStale: false };
     const staleHealthy = { ...printer("Stale healthy", "healthy"), isStale: true };
-    const groups = groupPrinters([pending, staleHealthy]);
-    expect(groups.pending).toEqual([pending]);
-    expect(groups.offline).toEqual([]);
-    expect(groups.healthy).toEqual([staleHealthy]);
-  });
-});
-
-describe("presentation preference", () => {
-  const storage = () => {
-    const values = new Map();
-    return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), values };
-  };
-
-  it("defaults to Operational and rejects invalid stored values", () => {
-    expect(loadViewMode(storage())).toBe("operational");
-    const invalid = storage(); invalid.setItem(VIEW_STORAGE_KEY, "wallboard");
-    expect(loadViewMode(invalid)).toBe("operational");
-  });
-
-  it("persists and reloads Compact without changing fleet state", () => {
-    const preference = storage();
-    const fleet = [printer("One", "healthy")];
-    expect(persistViewMode(preference, "compact")).toBe("compact");
-    expect(loadViewMode(preference)).toBe("compact");
-    expect(fleet).toEqual([printer("One", "healthy")]);
-  });
-
-  it("uses the same filters in either presentation", () => {
-    const fleet = [printer("One", "healthy"), printer("Two", "warning")];
-    const filters = { search: "two", site: "", state: "warning" };
-    expect(filterFleet(fleet, filters)).toEqual([fleet[1]]);
-    expect(filterFleet(fleet, filters)).toEqual([fleet[1]]);
+    expect(applySummaryFilter([pending, staleHealthy], "pending")).toEqual([pending]);
+    expect(applySummaryFilter([pending, staleHealthy], "offline")).toEqual([]);
+    expect(applySummaryFilter([pending, staleHealthy], "stale")).toEqual([staleHealthy]);
   });
 });
 
@@ -102,14 +61,13 @@ describe("toner presentation model", () => {
   });
 });
 
-describe("compact interaction contracts", () => {
+describe("fleet-card interaction contracts", () => {
   it("bounds visible alerts and reports the remainder", () => {
     expect(compactAlerts([{ message: "A" }, { message: "B" }, { message: "C" }, { message: "D" }])).toEqual({ visible: [{ message: "A" }], additional: 3 });
   });
 
-  it("routes Operational buttons and keyboard-accessible Compact cards to the shared detail function", () => {
+  it("routes keyboard-accessible fleet cards to the shared detail function", () => {
     const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
-    expect(source).toContain('card.querySelector(".detail-button").addEventListener("click", () => void showDetails');
     expect(source).toContain('card.addEventListener("click", open)');
     expect(source).toContain('event.key === "Enter" || event.key === " "');
     expect(source).toContain('tonerVisual(printer.consumables, { compact: true })');
@@ -131,28 +89,40 @@ describe("single-site presentation", () => {
   });
 });
 
-describe("Operational supply rows", () => {
-  it("uses horizontal presentation data with toner identity colours and separate attention", () => {
-    const rows = operationalSupplyRows([
-      { type: "toner", colour: "black", description: "Black toner", levelPercent: 13 },
-      { type: "toner", colour: "cyan", description: "Cyan toner", levelPercent: 5 },
-      { type: "toner", colour: "magenta", description: "Magenta toner", levelPercent: 42 }
-    ]);
-    expect(rows.map((item) => [item.label, item.fillColour, item.attention])).toEqual([
-      ["Cyan", "#008ba8", "critical"], ["Black", "#242b2d", "low"]
-    ]);
-  });
-
-  it("uses neutral maintenance colour and never turns unknown into zero", () => {
-    expect(supplyPresentation({ type: "fuser", description: "Fusing Unit", levelPercent: 5 })).toMatchObject({ fillColour: "#66757b", isToner: false, attention: "critical" });
-    expect(supplyPresentation({ type: "toner", colour: "yellow", description: "Yellow", rawLevel: -3, rawMaximum: -2 })).toMatchObject({ fillColour: "#d6a900", levelPercent: null, displayValue: "—", attention: "unknown" });
-  });
-
-  it("uses rows only in Operational while preserving Compact tiles", () => {
+describe("consolidated fleet dashboard", () => {
+  it("renders one fleet view without a presentation switch or preference code", () => {
+    const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
     const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
-    expect(source).toContain("operationalSupplyRows(printer.consumables)");
-    expect(source).not.toContain("tonerVisual(printer.consumables, { attentionOnly: true })");
-    expect(source).toContain("tonerVisual(printer.consumables, { compact: true })");
+    const model = readFileSync(new URL("../public/view-model.js", import.meta.url), "utf8");
+    expect(html).toContain('id="fleet-view"');
+    expect(html).not.toContain("Operational");
+    expect(html).not.toContain("data-view");
+    expect(source).not.toContain("setViewMode");
+    expect(source).not.toContain("localStorage");
+    expect(model).not.toContain("VIEW_STORAGE_KEY");
+  });
+
+  it("keeps canonical API order in the sole grid", () => {
+    const ordered = [printer("Offline", "offline", false), printer("Critical", "critical"), printer("Warning", "warning"), printer("Pending", "unknown", true, "pending"), printer("Healthy", "healthy")];
+    expect(applySummaryFilter(ordered, null).map((item) => item.identity.displayName)).toEqual(["Offline", "Critical", "Warning", "Pending", "Healthy"]);
+  });
+
+  it("omits missing location without inventing a placeholder and preserves configured location", () => {
+    const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    expect(displayLocation(undefined)).toBeNull();
+    expect(displayLocation(null)).toBeNull();
+    expect(displayLocation("   ")).toBeNull();
+    expect(displayLocation("  Library, Level 1  ")).toBe("Library, Level 1");
+    expect(source).toContain("if (configuredLocation) location.textContent = configuredLocation");
+    expect(source).toContain("else location.remove()");
+    expect(source).not.toMatch(/Unassigned(?: location)?/);
+  });
+
+  it("retains complete supplies and evidence in the shared Detail", () => {
+    const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    expect(source).toContain('"Complete supply evidence"');
+    expect(source).toContain('"Current state"');
+    expect(source).toContain('"Recent history"');
   });
 });
 

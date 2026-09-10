@@ -82,18 +82,13 @@ Stale state is independent of reachability and health. A state becomes stale whe
 
 The collector writes a heartbeat every 15 seconds. The API reports it as running only while the newest heartbeat is at most 45 seconds old; older unclosed rows are `stale`, and abandoned current-run/next-poll fields are not presented as active. Watch mode persists `nextScheduledRunAt` after each completed cycle.
 
-## Dashboard presentations
+## Dashboard
 
-The dashboard offers two presentations over the same stored, canonically ordered fleet state:
+The dashboard is a dense, responsive fleet-at-a-glance view over canonically ordered stored state. It shows normal K/C/M/Y toner levels, concise maintenance and alert summaries, page counts, freshness, and immediate offline/health state. Cards open Printer Detail, which is the investigation surface for complete supplies, alerts, counters, timestamps, failure evidence, and history.
 
-- **Operational** is the default status-first triage view, grouped by offline, critical, warning, pending, and healthy state.
-- **Compact** is a dense fleet overview intended for wide displays, with the full normal toner state visible on every card where available.
+Toner and ink use K/C/M/Y tiles in canonical black, cyan, magenta, and yellow order. Separate amber and red surrounding treatments indicate low and near-empty UI attention states, with text and accessible labels so meaning does not depend on colour. Missing or non-derivable percentages display as unknown (`—`), never as 0%. Site remains part of the backend contract but is intentionally omitted from the current single-site presentation. Missing locations render no placeholder.
 
-The presentation switch is immediate, does not make a collection request, and is saved locally in the browser. Search and state filters apply identically to both views; site remains part of the backend contract but is intentionally omitted from the current single-site presentation. Both views collapse responsively for laptops, tablets, and phones.
-
-Compact toner and ink use K/C/M/Y tiles in canonical black, cyan, magenta, and yellow order. Operational supply attention uses explanatory horizontal rows with the same identity colours. Separate amber and red surrounding treatments indicate low and near-empty UI attention states, with text and accessible labels so meaning does not depend on colour. Missing or non-derivable percentages display as unknown (`—`), never as 0%. Maintenance supplies use neutral bars in Operational, concise counts in Compact, and complete evidence in printer detail.
-
-Fleet summary metrics are keyboard-accessible filters. State metrics synchronize with the State selector; Reachable, Low supplies, and Stale remain independent predicates. Counts continue to describe the current search context rather than collapsing to the selected metric. Clear Filters resets search and fleet predicates without changing the saved Operational/Compact preference.
+Fleet summary metrics are keyboard-accessible filters. State metrics synchronize with the State selector; Reachable, Low supplies, and Stale remain independent predicates. Counts continue to describe the current search context rather than collapsing to the selected metric. Clear Filters resets search and fleet predicates.
 
 ## Commands
 

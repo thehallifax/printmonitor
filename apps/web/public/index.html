@@ -35,11 +35,6 @@
         <label>Search<input id="search-filter" type="search" placeholder="Name, hostname, model, location"></label>
         <label>State<select id="state-filter"><option value="">All states</option><option value="offline">Offline</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="pending">Pending</option><option value="healthy">Healthy</option><option value="unknown">Unknown</option></select></label>
         <button type="button" id="clear-filters">Clear filters</button>
-        <fieldset class="view-switcher" aria-label="Fleet presentation">
-          <legend>Presentation</legend>
-          <button type="button" data-view="operational" aria-pressed="true">Operational</button>
-          <button type="button" data-view="compact" aria-pressed="false">Compact</button>
-        </fieldset>
       </section>
 
       <div id="error-state" class="error-state" role="alert" hidden>
@@ -48,73 +43,12 @@
         <button type="button" id="retry-button">Retry now</button>
       </div>
 
-      <div id="operational-view">
-      <section class="fleet-section" id="offline-section" hidden>
-        <div class="section-heading">
-          <div><span class="section-kicker attention">Connectivity</span><h2>Offline</h2></div>
-          <p>Devices that did not answer the latest DNS or SNMP collection attempt.</p>
-        </div>
-        <div class="card-grid" id="offline-grid"></div>
-      </section>
-
-      <section class="fleet-section" id="critical-section" hidden>
-        <div class="section-heading">
-          <div><span class="section-kicker attention">Immediate action</span><h2>Critical</h2></div>
-          <p>Reachable devices reporting an operational condition that can stop printing.</p>
-        </div>
-        <div class="card-grid" id="critical-grid"></div>
-      </section>
-
-      <section class="fleet-section" id="warning-section" hidden>
-        <div class="section-heading">
-          <div><span class="section-kicker warning-kicker">Plan attention</span><h2>Warnings</h2></div>
-          <p>Reachable devices with low supplies or another non-critical warning.</p>
-        </div>
-        <div class="card-grid" id="warning-grid"></div>
-      </section>
-
-      <section class="fleet-section" id="pending-section" hidden>
-        <div class="section-heading">
-          <div><span class="section-kicker">Configured</span><h2>Never collected</h2></div>
-          <p>Active inventory entries awaiting their first collection attempt.</p>
-        </div>
-        <div class="card-grid" id="pending-grid"></div>
-      </section>
-
-      <section class="fleet-section" id="healthy-section">
-        <div class="section-heading">
-          <div><span class="section-kicker">Operational</span><h2>Healthy</h2></div>
-          <p>Healthy devices and reachable devices awaiting enough evidence for a health assessment.</p>
-        </div>
-        <div class="card-grid" id="healthy-grid"></div>
-      </section>
-      </div>
-
-      <section id="compact-view" aria-label="Compact fleet view" hidden>
+      <section id="fleet-view" aria-label="Printer fleet">
         <div class="compact-grid" id="compact-grid"></div>
       </section>
       <div class="empty-state" id="empty-state" hidden><strong>No active configured printers</strong><span>Load a validated inventory or the fictional demo data to populate this dashboard.</span></div>
       <div class="empty-state" id="no-results-state" hidden><strong>No printers match these filters</strong><span>Clear or adjust the fleet filters.</span></div>
     </main>
-
-    <template id="printer-card-template">
-      <article class="printer-card">
-        <div class="card-accent"></div>
-        <div class="card-header">
-          <div><p class="location"></p><h3></h3><p class="hostname"></p></div>
-          <span class="status-pill"></span>
-        </div>
-        <div class="state-badges"><span class="stale-badge" hidden>Stale</span><span class="last-known-badge" hidden>Last-known data</span></div>
-        <dl class="device-facts">
-          <div><dt>Device</dt><dd class="device"></dd></div>
-          <div><dt>Resolved IP</dt><dd class="ip"></dd></div>
-        </dl>
-        <div class="alerts" hidden></div>
-        <div class="supplies" hidden><p class="mini-heading">Supplies</p><div class="supply-list"></div></div>
-        <div class="card-footer"><span class="reachability"></span><time></time></div>
-        <div class="card-actions"><span class="page-count"></span><button type="button" class="detail-button">View details</button></div>
-      </article>
-    </template>
 
     <template id="compact-card-template">
       <article class="compact-card" role="button" tabindex="0">

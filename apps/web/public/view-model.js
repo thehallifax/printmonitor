@@ -1,7 +1,3 @@
-export const prioritizedHealthStates = ["offline", "critical", "warning", "pending", "healthy"];
-export const VIEW_MODES = ["operational", "compact"];
-export const DEFAULT_VIEW_MODE = "operational";
-export const VIEW_STORAGE_KEY = "printer-fleet-view";
 export const SUMMARY_FILTERS = ["reachable", "offline", "critical", "warning", "pending", "healthy", "low-supplies", "stale"];
 export const TONER_CHANNELS = [
   { key: "black", shortLabel: "K", label: "Black", colour: "#242b2d" },
@@ -19,21 +15,6 @@ export function consumableAttention(levelPercent) {
   return "normal";
 }
 
-export function normalizeViewMode(value) {
-  return VIEW_MODES.includes(value) ? value : DEFAULT_VIEW_MODE;
-}
-
-export function loadViewMode(storage) {
-  try { return normalizeViewMode(storage?.getItem(VIEW_STORAGE_KEY)); }
-  catch { return DEFAULT_VIEW_MODE; }
-}
-
-export function persistViewMode(storage, value) {
-  const mode = normalizeViewMode(value);
-  try { storage?.setItem(VIEW_STORAGE_KEY, mode); } catch { /* preferences are optional */ }
-  return mode;
-}
-
 export function tonerChannels(consumables) {
   return TONER_CHANNELS.flatMap((channel) => {
     const supply = consumables.find((item) => ["toner", "ink"].includes(item.type) && item.colour?.toLowerCase() === channel.key);
@@ -43,29 +24,14 @@ export function tonerChannels(consumables) {
   });
 }
 
-export function supplyPresentation(supply) {
-  const channel = ["toner", "ink"].includes(supply.type) ? TONER_CHANNELS.find((item) => item.key === supply.colour?.toLowerCase()) : undefined;
-  const levelPercent = Number.isFinite(supply.levelPercent) ? supply.levelPercent : null;
-  return {
-    supply,
-    label: channel?.label ?? supply.description,
-    fillColour: channel?.colour ?? "#66757b",
-    isToner: Boolean(channel),
-    levelPercent,
-    displayValue: levelPercent == null ? "—" : `${levelPercent}%`,
-    attention: consumableAttention(levelPercent)
-  };
-}
-
-export function operationalSupplyRows(consumables) {
-  return consumables.map(supplyPresentation)
-    .filter((item) => ["low", "critical"].includes(item.attention))
-    .sort((a, b) => a.levelPercent - b.levelPercent);
-}
-
 export function maintenanceSummary(consumables) {
   const items = consumables.filter((item) => !["toner", "ink"].includes(item.type));
   return { count: items.length, attentionCount: items.filter((item) => consumableAttention(item.levelPercent) === "low" || consumableAttention(item.levelPercent) === "critical").length };
+}
+
+export function displayLocation(value) {
+  const location = typeof value === "string" ? value.trim() : "";
+  return location || null;
 }
 
 export function compactAlerts(alerts, maximum = 2) {
@@ -114,16 +80,6 @@ export function failureLabel(kind) {
     network: "Network unreachable",
     unknown: "SNMP unavailable"
   })[kind] || "SNMP unavailable";
-}
-
-export function groupPrinters(printers) {
-  return {
-    offline: printers.filter((printer) => printer.operationalState === "offline"),
-    critical: printers.filter((printer) => printer.reachability?.reachable && printer.normalizedHealth === "critical"),
-    warning: printers.filter((printer) => printer.reachability?.reachable && printer.normalizedHealth === "warning"),
-    pending: printers.filter((printer) => printer.operationalState === "pending"),
-    healthy: printers.filter((printer) => printer.operationalState !== "pending" && printer.reachability?.reachable && ["healthy", "unknown"].includes(printer.normalizedHealth))
-  };
 }
 
 export function filterFleet(printers, filters) {
