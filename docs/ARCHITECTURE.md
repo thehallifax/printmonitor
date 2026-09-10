@@ -10,7 +10,7 @@ Background collector ── DNS lookup ── read-only SNMP GET/GETNEXT
        │                                      │
        │ normalized contracts + raw evidence │
        ▼                                      │
-SQLite (observations + latest state) ◄────────┘
+SQLite (catalogue + observations + runtime) ◄┘
        │
        ├── Fastify API (stored reads only)
        │
@@ -35,7 +35,7 @@ Dependencies point inward: the API and collector use storage/shared; storage use
 4. **SQLite:** the persistence boundary and the only source read by the API. SQL parameters are bound, not interpolated.
 5. **HTTP/browser:** no credentials are exposed to the browser. The browser has no path to a printer and cannot start collection.
 
-Multi-site control-plane work remains deliberately deferred. Milestone 2 keeps the existing single-node boundary while validating its parser and adapter behavior against explicitly authorized devices.
+Multi-site control-plane work remains deliberately deferred. The current product supports a local inventory and one SQLite-backed collector/API deployment while validating parser and adapter behavior against explicitly authorized devices.
 
 ## Read-only guarantee
 
@@ -46,6 +46,10 @@ The UI/API process does not import or invoke collector code. This structural sep
 ## Reachability and health
 
 Reachability is collection evidence: whether the printer answered the current SNMP collection. Health represents the normalized operational condition when evidence is available. An unreachable printer is shown as `offline`; an answering printer can be `healthy`, `warning`, `critical`, or `unknown`. Sleep or power-save values do not imply offline because an SNMP response proves reachability.
+
+Freshness is a third, independent axis. Stored state is stale when the latest attempt age is greater than `max(2 × the configured poll interval, 300 seconds)`. Staleness is derived at read time, so an application restart immediately identifies old stored data without rewriting observations. It does not change health or reachability.
+
+`pending` is the canonical operational state for an active configured printer without an observation. It contains inventory identity only: reachability, provenance, and collection time are null, telemetry collections are empty, health is unknown, and stale is false. A first failed attempt is offline and has never been successfully seen; a later failure retains prior identity, supplies, counters, and last-seen evidence.
 
 ## Normalization
 
@@ -65,11 +69,22 @@ Private OIDs must be declared and queried inside their vendor adapter. Storage, 
 
 - `schema_migrations(version, applied_at)`: applied migration ledger.
 - `sites(id, name, created_at, updated_at)`: site identity for future partitioning.
-- `printers(inventory_id, site_id, hostname, display_name, location, enabled, timestamps)`: validated configured inventory.
-- `collection_runs(id, timings, counts, status, error)`: one record per collector cycle.
+- `printers(inventory_id, site_id, hostname, display_name, location, enabled, configured, timestamps)`: persistent inventory catalogue. Reconciliation updates mutable metadata by stable ID and marks absent entries unconfigured without deleting history.
+- `collection_runs(id, timings, configured/attempted/reachable/unreachable/partial/failed counts, status, error)`: one record per collector cycle.
 - `observations(id, inventory_id, run_id, collected_at, reachable, normalized_health, resolved_ip, latency_ms, adapter, observation_json)`: immutable normalized history with raw evidence in JSON.
 - `latest_printer_state(inventory_id, observation_id, collected_at, reachable, normalized_health, resolved_ip, observation_json)`: materialized current state for API reads.
+- `collector_runtime(instance_id, heartbeat/run/schedule timestamps, watch mode, poll interval, stopped_at)`: lightweight cross-process runtime status; it contains no PID, host identity, or credentials.
 
 Indexes support latest history lookup, run lookup, and fleet health filtering. SQLite WAL mode allows the API to read while the single collector writes.
 
-When an offline observation lacks identity details, storage merges last-known manufacturer, model, serial, resolved address, and last-seen time into the current materialized state. The offline observation remains explicit and its failure evidence is preserved.
+Every device attempt is inserted unchanged into immutable observation history. When an offline observation lacks identity, supplies, or counters, storage merges the previous successful values only into `latest_printer_state`. The current state therefore shows the failed latest attempt and prior last-seen time alongside clearly marked last-known device data, while the historical failed observation remains unmodified.
+
+## Fleet lifecycle and ordering
+
+The collector synchronizes validated inventory, polls configured and enabled printers with bounded concurrency, and isolates DNS/SNMP failures per device. Watch mode runs immediately and schedules the next cycle only after the previous cycle finishes. A process-local guard rejects an overlapping run against the same database instance, and shutdown waits for an active cycle before closing SQLite. Disabled or removed entries remain queryable by ID but are excluded from the active fleet.
+
+Each collector process generates an ephemeral instance ID, persists startup and run boundaries, heartbeats every 15 seconds, and records the next watch-mode poll. The API treats a heartbeat older than 45 seconds as stale and suppresses abandoned current-run and next-poll claims. The processes remain decoupled; the supported topology is exactly one collector and one API/web process sharing one local SQLite database.
+
+The storage layer applies one canonical order before API delivery: offline, critical, warning, pending, healthy, then unknown. Within a priority group stale entries come first, followed by display name or hostname. The browser preserves this order while grouping and filtering.
+
+The Fastify process imports storage and shared contracts, not the collector. Health, fleet, detail, history, and run endpoints are parameterized stored reads and cannot initiate DNS or SNMP work.

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import YAML from "yaml";
@@ -9,25 +8,31 @@ const hostname = z.string().trim().min(1).max(253).refine(
   "must be a DNS hostname, not an IP address"
 );
 
+const identifier = z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, "must use lowercase letters, digits, and hyphens");
+
 export const inventorySchema = z.object({
-  site: z.object({ id: z.string().trim().min(1).regex(/^[a-z0-9][a-z0-9-]*$/), name: z.string().trim().min(1) }),
+  site: z.object({ id: identifier, name: z.string().trim().min(1) }).strict().optional().default({ id: "default", name: "Default Site" }),
   printers: z.array(z.object({
+    id: identifier,
     hostname,
-    displayName: z.string().trim().min(1),
+    displayName: z.string().trim().min(1).optional(),
     location: z.string().trim().min(1).optional(),
     enabled: z.boolean().default(true)
-  })).min(1)
-}).superRefine((value, context) => {
-  const seen = new Set<string>();
+  }).strict()).min(1)
+}).strict().superRefine((value, context) => {
+  const ids = new Set<string>();
+  const hostnames = new Set<string>();
   value.printers.forEach((printer, index) => {
+    if (ids.has(printer.id)) context.addIssue({ code: "custom", path: ["printers", index, "id"], message: "duplicate printer id" });
+    ids.add(printer.id);
     const key = printer.hostname.toLowerCase();
-    if (seen.has(key)) context.addIssue({ code: "custom", path: ["printers", index, "hostname"], message: "duplicate hostname" });
-    seen.add(key);
+    if (hostnames.has(key)) context.addIssue({ code: "custom", path: ["printers", index, "hostname"], message: "duplicate canonical hostname" });
+    hostnames.add(key);
   });
 });
 
 export type InventoryConfig = z.infer<typeof inventorySchema>;
-export type InventoryPrinter = InventoryConfig["printers"][number] & { inventoryId: string; siteId: string };
+export type InventoryPrinter = Omit<InventoryConfig["printers"][number], "id" | "displayName"> & { inventoryId: string; siteId: string; displayName: string };
 
 export function validateExplicitHostname(value: string): string {
   const result = hostname.safeParse(value);
@@ -46,8 +51,11 @@ export function parseInventory(source: string): { site: InventoryConfig["site"];
   return {
     site: result.data.site,
     printers: result.data.printers.map((printer) => ({
-      ...printer,
-      inventoryId: `${result.data.site.id}-${createHash("sha256").update(printer.hostname.toLowerCase()).digest("hex").slice(0, 12)}`,
+      hostname: printer.hostname.toLowerCase(),
+      displayName: printer.displayName ?? printer.hostname.toLowerCase(),
+      location: printer.location,
+      enabled: printer.enabled,
+      inventoryId: printer.id,
       siteId: result.data.site.id
     }))
   };

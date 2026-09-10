@@ -97,7 +97,56 @@ export interface FleetSummary {
   warning: number;
   critical: number;
   unknown: number;
+  pending: number;
   lowConsumables: number;
+}
+
+export type FleetOperationalState = "offline" | "critical" | "warning" | "pending" | "healthy" | "unknown";
+
+export interface FleetPrinterState {
+  identity: PrinterIdentity;
+  site: { id: string; name: string };
+  enabled: boolean;
+  configured: boolean;
+  configuredAt: string;
+  operationalState: FleetOperationalState;
+  reachability: PrinterReachability | null;
+  consumables: Consumable[];
+  alerts: PrinterAlert[];
+  counters: PrinterCounters;
+  normalizedHealth: NormalizedHealth;
+  collectedAt: string | null;
+  provenance: CollectorProvenance | null;
+  isStale: boolean;
+  staleSince: string | null;
+  ageSeconds: number | null;
+  latestAttemptAt: string | null;
+  lastSuccessfulCollectionAt: string | null;
+  collectionDurationMs: number | null;
+  lastKnownData: boolean;
+}
+
+export const STALE_MINIMUM_SECONDS = 300;
+
+export function deriveStaleState(lastAttempt: string, pollIntervalSeconds: number, now = new Date()): Pick<FleetPrinterState, "isStale" | "staleSince" | "ageSeconds"> {
+  const attemptedAt = Date.parse(lastAttempt);
+  const thresholdSeconds = Math.max(pollIntervalSeconds * 2, STALE_MINIMUM_SECONDS);
+  const ageSeconds = Number.isFinite(attemptedAt) ? Math.max(0, Math.floor((now.getTime() - attemptedAt) / 1000)) : Number.MAX_SAFE_INTEGER;
+  const isStale = ageSeconds > thresholdSeconds;
+  return {
+    isStale,
+    ageSeconds,
+    staleSince: isStale && Number.isFinite(attemptedAt) ? new Date(attemptedAt + thresholdSeconds * 1000).toISOString() : null
+  };
+}
+
+const operationalPriority: Record<FleetOperationalState, number> = { offline: 0, critical: 1, warning: 2, pending: 3, healthy: 4, unknown: 5 };
+
+export function compareFleetPriority(a: Pick<FleetPrinterState, "identity" | "operationalState" | "isStale">, b: Pick<FleetPrinterState, "identity" | "operationalState" | "isStale">): number {
+  const healthDifference = operationalPriority[a.operationalState] - operationalPriority[b.operationalState];
+  if (healthDifference) return healthDifference;
+  if (a.isStale !== b.isStale) return a.isStale ? -1 : 1;
+  return (a.identity.displayName || a.identity.hostname).localeCompare(b.identity.displayName || b.identity.hostname, undefined, { sensitivity: "base" });
 }
 
 export function calculateLevelPercent(rawLevel?: number, rawMaximum?: number): number | undefined {

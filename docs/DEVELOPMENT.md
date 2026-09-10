@@ -25,6 +25,8 @@ To inspect endpoints:
 curl -s http://127.0.0.1:3000/api/health
 curl -s http://127.0.0.1:3000/api/fleet
 curl -s http://127.0.0.1:3000/api/printers
+curl -s http://127.0.0.1:3000/api/printers/example-campus-library/history?limit=10
+curl -s http://127.0.0.1:3000/api/runs
 ```
 
 ## Configuration
@@ -57,13 +59,19 @@ See [Controlled live validation](LIVE_VALIDATION.md) for the capture, sanitizati
 ## Health rules
 
 - No SNMP response: `offline`.
-- Answering device with a critical alert or a supply at 5% or below: `critical`.
+- Answering device with evidence of an operationally blocking critical condition: `critical`.
 - Answering device with a warning alert or a supply at 20% or below: `warning`.
 - Answering device with non-problem evidence: `healthy`.
 - Answering device without enough health evidence: `unknown`.
 
 Power-save does not create an offline result. Reachability and health remain distinct in the shared contract even though the display prioritizes offline devices.
 
+Freshness is also independent: state is stale only after its latest attempt age exceeds `max(2 × POLL_INTERVAL_SECONDS, 300 seconds)`. An offline poll can be fresh, and a healthy stored observation can be stale.
+
+Inventory synchronization is catalogue reconciliation, not telemetry creation. New active entries appear as `pending`/“Never collected” with null reachability and empty telemetry. The first failed attempt becomes offline/“Never successfully seen”; a failure after success retains last-known evidence. Disabled and removed entries are not active fleet failures, and removal marks `configured=0` rather than deleting observations.
+
 ## Operational shape
 
-Use one collector writer per SQLite database. Run the collector and API under separate process supervisors with the same `DATABASE_PATH`. Back up the database using SQLite-aware tooling. For multiple sites or multiple concurrent writers, move ingestion to a central service rather than placing a SQLite file on shared network storage.
+Use one collector writer per SQLite database. Run the collector and API under separate process supervisors with the same `DATABASE_PATH`. The collector heartbeat is written every 15 seconds and is fresh for 45 seconds; the API reports older unclosed runtime state as stale and does not expose its abandoned current run as active. Watch mode persists the next scheduled poll after a cycle completes. Back up the database using SQLite-aware tooling. Multiple simultaneous collectors are unsupported; for multiple sites or writers, move ingestion to a central service rather than placing SQLite on shared network storage.
+
+Watch mode performs an immediate collection, then waits the configured interval after each completed run. `SIGINT` and `SIGTERM` stop future scheduling, allow an active run to settle, and close the database. Run summaries record configured, attempted, reachable, unreachable, partial, and failed counts.

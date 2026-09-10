@@ -24,7 +24,7 @@ npm run validate:printer -- --ip 172.18.0.19
 
 Exactly one of `--hostname` or `--ip` is required. They are mutually exclusive. IPv6, CIDRs, ranges, wildcards, extra positional targets, and multiple devices are rejected.
 
-The command reports target mode, target, DNS resolution or `DNS: skipped`, elapsed time, vendor detection evidence, normalized identity/health/supplies/alerts/counters, collection completeness, and a per-standard-OID status of `succeeded`, `unavailable`, or `failed`. It never prints the community.
+The command reports target mode, target, DNS resolution or `DNS: skipped`, elapsed time, vendor detection evidence, normalized identity/health/supplies/alerts/counters, collection completeness, and a per-standard-OID status of `succeeded`, `empty`, `unsupported`, or `failed`. It never prints the community.
 
 For a private raw capture, add `--capture`:
 
@@ -71,3 +71,16 @@ npm run fixture:sanitize -- \
 5. Add a deterministic regression test that loads the sanitized fixture and states the observed discrepancy.
 
 Prepared directories exist for Ricoh, Canon, Konica Minolta, Kyocera, and FUJIFILM. Reviewed sanitized live fixtures now cover FUJIFILM through the generic standard-MIB path and multiple Konica Minolta i-Series models through enterprise-OID adapter detection with standard-MIB collection. Konica validation spans 13–20 supplies, developer units, staple/finisher supplies, sleep, empty alert tables, low-toner warnings, and standard lifetime page counts. Do not add private OIDs until a reviewed fixture shows the standard MIB is insufficient and the private OID is documented with confidence.
+
+## Anonymized validation matrix
+
+| Vendor | Model | Validation path | Adapter | Fixture |
+|---|---|---|---|---|
+| FUJIFILM | Apeos C3567 | explicit-ip | generic | yes |
+| Konica Minolta | bizhub C3321i | explicit-ip | konica-minolta | yes |
+| Konica Minolta | bizhub C301i | explicit-ip | konica-minolta | yes |
+| Konica Minolta | bizhub C451i | explicit-ip | konica-minolta | yes |
+| Konica Minolta | bizhub C251i | explicit-ip | konica-minolta | yes |
+| Ricoh | pending | hostname | pending | no |
+| Canon | pending | hostname | pending | no |
+| Kyocera | pending | hostname | pending | no |

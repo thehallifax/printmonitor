@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateLevelPercent, emptyOfflineObservation, normalizeHealth, type PrinterObservation } from "@printer-fleet/shared";
+import { calculateLevelPercent, compareFleetPriority, deriveStaleState, emptyOfflineObservation, normalizeHealth, type FleetPrinterState, type PrinterObservation } from "@printer-fleet/shared";
 import { parseInventory } from "../src/inventory.js";
 import { resolvePrinter } from "../src/dns.js";
 import { detectVendor } from "../src/vendor.js";
@@ -16,18 +16,30 @@ const base = (overrides: Partial<PrinterObservation> = {}): PrinterObservation =
 
 describe("inventory validation", () => {
   it("accepts hostnames and creates stable opaque inventory ids", () => {
-    const yaml = `site:\n  id: site-a\n  name: Site A\nprinters:\n  - hostname: printer-a.example.invalid\n    displayName: Printer A\n`;
+    const yaml = `site:\n  id: site-a\n  name: Site A\nprinters:\n  - id: printer-a\n    hostname: printer-a.example.invalid\n    displayName: Printer A\n`;
     const first = parseInventory(yaml);
     const second = parseInventory(yaml);
+    expect(first.printers[0]!.inventoryId).toBe("printer-a");
     expect(first.printers[0]!.inventoryId).toBe(second.printers[0]!.inventoryId);
     expect(first.printers[0]!.enabled).toBe(true);
   });
 
   it("rejects fixed IPv4 addresses and duplicate hostnames", () => {
-    const fixedIp = `site: { id: site-a, name: Site A }\nprinters:\n  - { hostname: 192.0.2.10, displayName: Bad }`;
+    const fixedIp = `site: { id: site-a, name: Site A }\nprinters:\n  - { id: bad, hostname: 192.0.2.10, displayName: Bad }`;
     expect(() => parseInventory(fixedIp)).toThrow(/DNS hostname/);
-    const duplicate = `site: { id: site-a, name: Site A }\nprinters:\n  - { hostname: Print-A.example.invalid, displayName: A }\n  - { hostname: print-a.example.invalid, displayName: B }`;
-    expect(() => parseInventory(duplicate)).toThrow(/duplicate hostname/);
+    const duplicate = `site: { id: site-a, name: Site A }\nprinters:\n  - { id: a, hostname: Print-A.example.invalid, displayName: A }\n  - { id: b, hostname: print-a.example.invalid, displayName: B }`;
+    expect(() => parseInventory(duplicate)).toThrow(/duplicate canonical hostname/);
+  });
+
+  it("rejects duplicate ids and accepts disabled printers with optional display names", () => {
+    const duplicate = `site: { id: site-a, name: Site A }\nprinters:\n  - { id: same, hostname: a.example.invalid }\n  - { id: same, hostname: b.example.invalid, enabled: false }`;
+    expect(() => parseInventory(duplicate)).toThrow(/duplicate printer id/);
+    const valid = parseInventory(`site: { id: site-a, name: Site A }\nprinters:\n  - { id: a, hostname: A.example.invalid }\n  - { id: b, hostname: b.example.invalid, enabled: false }`);
+    expect(valid.printers).toMatchObject([
+      { inventoryId: "a", hostname: "a.example.invalid", displayName: "a.example.invalid", enabled: true },
+      { inventoryId: "b", hostname: "b.example.invalid", enabled: false }
+    ]);
+    expect(parseInventory(`printers:\n  - { id: standalone, hostname: standalone.example.invalid }`).site).toEqual({ id: "default", name: "Default Site" });
   });
 });
 
@@ -105,5 +117,24 @@ describe("offline observations", () => {
       normalizedHealth: "offline",
       consumables: [], alerts: [], counters: {}
     });
+  });
+});
+
+describe("fleet freshness and ordering", () => {
+  it("derives stale state independently from reachability and health", () => {
+    expect(deriveStaleState("2026-01-01T00:08:01.000Z", 300, new Date("2026-01-01T00:10:00.000Z")).isStale).toBe(false);
+    const stale = deriveStaleState("2026-01-01T00:00:00.000Z", 300, new Date("2026-01-01T00:10:01.000Z"));
+    expect(stale).toMatchObject({ isStale: true, ageSeconds: 601, staleSince: "2026-01-01T00:10:00.000Z" });
+  });
+
+  it("orders offline, critical, warning, pending, healthy, then unknown explicitly", () => {
+    const state = (name: string, health: FleetPrinterState["normalizedHealth"], reachable = true, operationalState: FleetPrinterState["operationalState"] = health): FleetPrinterState => ({
+      ...base({ identity: { ...identity, displayName: name }, normalizedHealth: health, reachability: { reachable, lastAttempt: "2026-01-01T00:00:00.000Z" } }),
+      site: { id: "site", name: "Site" }, enabled: true, configured: true, configuredAt: "2026-01-01T00:00:00.000Z", operationalState,
+      isStale: false, staleSince: null, ageSeconds: 0, latestAttemptAt: "2026-01-01T00:00:00.000Z", lastSuccessfulCollectionAt: null, collectionDurationMs: null, lastKnownData: false
+    });
+    const pending = { ...state("Pending", "unknown", true, "pending"), reachability: null, collectedAt: null, provenance: null, ageSeconds: null, latestAttemptAt: null };
+    const sorted = [state("Unknown", "unknown"), state("Healthy", "healthy"), pending, state("Warning", "warning"), state("Critical", "critical"), state("Offline", "offline", false)].sort(compareFleetPriority);
+    expect(sorted.map((item) => item.operationalState)).toEqual(["offline", "critical", "warning", "pending", "healthy", "unknown"]);
   });
 });

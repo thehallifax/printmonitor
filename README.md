@@ -4,14 +4,15 @@ Printer Fleet Monitor is a vendor-neutral, read-only monitoring foundation for n
 
 ## Current scope
 
-- Hostname-only YAML inventory with schema validation and deterministic inventory IDs
+- Hostname-only YAML inventory with explicit stable printer IDs and early schema validation
 - DNS resolution at collection time, including the resolved address in telemetry
 - Generic SNMPv2c collector using SNMPv2-MIB, HOST-RESOURCES-MIB, and Printer-MIB
 - Manufacturer detection for Ricoh, Canon, Konica Minolta, and Kyocera behind an adapter registry
 - Conservative generic identity normalization for a validated FUJIFILM manufacturer signal
 - Shared normalized TypeScript contracts for identity, reachability, health, alerts, supplies, and counters
-- Append-only observations plus a materialized latest-state table in SQLite
-- Stored-state Fastify API and responsive dependency-free dashboard
+- A persistent configured-printer catalogue, append-only observations, and a materialized latest-state table in SQLite
+- Explicit `pending` state for active printers that have never been collected
+- Stored-state Fastify API with filtering/history and a responsive dependency-free fleet/detail dashboard
 - Deterministic tests with mocks/fixtures only
 - Controlled one-host live-validation harness with optional private captures
 - Typed per-OID and failure evidence plus fixture sanitization tooling
@@ -50,14 +51,36 @@ npm run collect             # one collection cycle
 npm run collect -- --watch  # repeat using POLL_INTERVAL_SECONDS
 ```
 
-The API is a separate process and never initiates collection. In production, run the collector and API as separate supervised services.
+The API is a separate process and never initiates collection. In production, run one collector and one API/web process as separate supervised services sharing the same local SQLite database. Multiple simultaneous collectors are not supported.
+
+Each inventory printer requires a stable lowercase `id` and DNS `hostname`. `displayName`, `location`, and `enabled` are optional; display name defaults to the canonical lowercase hostname and enabled defaults to true. The top-level site defaults to `default` when omitted. IDs and canonical hostnames must be unique, IP literals are rejected, and disabled entries remain stored but are not polled or treated as active failures. Entries removed during reconciliation are marked unconfigured rather than deleted, preserving history by stable ID. SNMP credentials belong only in the environment.
+
+Inventory reconciliation happens before collection. An active entry with no observation is returned as `operationalState: "pending"`, with unknown health, null reachability/provenance/collection time, empty telemetry, and `isStale: false`. A failed first attempt transitions it to offline with no successful-seen timestamp; failure after a success preserves last-known data and last-seen evidence.
+
+```yaml
+site: { id: example-campus, name: Example Campus }
+printers:
+  - id: example-campus-library
+    hostname: printer-library.example.invalid
+    displayName: Library Printer
+    location: Library
+    enabled: true
+```
+
+Watch mode collects immediately, waits for completion, then schedules the next run using `POLL_INTERVAL_SECONDS`. This completion-based timer and a process-local run guard prevent overlapping cycles.
 
 ## API
 
-- `GET /api/health` — service liveness only
+- `GET /api/health` — API, database, and persisted collector heartbeat/run/next-poll status
 - `GET /api/fleet` — fleet summary and current printer state
-- `GET /api/printers` — current stored printer states
+- `GET /api/printers` — current catalogue-backed states with `search`, `site`, `location`, `health`, `state`, `reachable`, and `stale` filters
 - `GET /api/printers/:id` — one current stored printer state, or 404
+- `GET /api/printers/:id/history?limit=25` — bounded recent history, capped at 100
+- `GET /api/runs` and `GET /api/runs/:id` — recent stored collection-run diagnostics
+
+Stale state is independent of reachability and health. A state becomes stale when its latest attempt is older than `max(2 × POLL_INTERVAL_SECONDS, 300 seconds)`. The API exposes `isStale`, `staleSince`, and `ageSeconds`; it never changes stale data into critical health.
+
+The collector writes a heartbeat every 15 seconds. The API reports it as running only while the newest heartbeat is at most 45 seconds old; older unclosed rows are `stale`, and abandoned current-run/next-poll fields are not presented as active. Watch mode persists `nextScheduledRunAt` after each completed cycle.
 
 ## Commands
 
@@ -79,6 +102,7 @@ See [Architecture](docs/ARCHITECTURE.md), [SNMP behavior](docs/SNMP.md), [contro
 - SNMPv2c only; credentials are process-level configuration rather than a secret-store integration.
 - Generic standard-MIB collection only. Vendor adapters can augment normalized fields but currently identify and label vendors without querying private enterprise OIDs.
 - Printer alert descriptions are best-effort because implementations vary across devices.
+- Mono/colour page counters are not yet available through the generic collection path.
 - Collection reachability means a successful SNMP response, not independent ICMP/TCP reachability.
 - No authentication, notifications, network discovery, SNMP traps, or multi-site control plane yet.
 - One SQLite database is appropriate for the initial single-node deployment, not concurrent writers on multiple hosts.
