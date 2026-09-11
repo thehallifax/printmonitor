@@ -73,4 +73,32 @@ describe("fleet collection orchestration", () => {
     await first;
     db.close();
   });
+
+  it("polls IP targets directly without invoking DNS", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "printer-fleet-ip-")); directories.push(directory);
+    const db = new FleetDatabase(join(directory, "fleet.sqlite"));
+    const printers = [{ ...makePrinter(9), hostname: undefined, ip: "192.0.2.9", targetType: "ip" as const, targetValue: "192.0.2.9" }];
+    db.syncInventory({ id: "site", name: "Fixture Site" }, printers);
+    let resolved = false;
+    await collectFleet(db, printers, { community: "fixture", timeoutMs: 100, retries: 0, concurrency: 1 }, {
+      resolve: async () => { resolved = true; return { address: "192.0.2.99", family: 4 }; },
+      collect: async (identity) => observation(identity)
+    });
+    expect(resolved).toBe(false);
+    expect(db.getPrinter("printer-9")?.identity.ip).toBe("192.0.2.9");
+    db.close();
+  });
+
+  it("keeps stable history when an inventory target changes", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "printer-fleet-target-change-")); directories.push(directory);
+    const db = new FleetDatabase(join(directory, "fleet.sqlite"));
+    const hostnamePrinter = makePrinter(10);
+    db.syncInventory({ id: "site", name: "Fixture Site" }, [hostnamePrinter]);
+    await collectFleet(db, [hostnamePrinter], { community: "fixture", timeoutMs: 100, retries: 0, concurrency: 1 }, { collect: async (identity) => observation(identity) });
+    const ipPrinter = { ...hostnamePrinter, hostname: undefined, ip: "192.0.2.10", targetType: "ip" as const, targetValue: "192.0.2.10" };
+    db.syncInventory({ id: "site", name: "Fixture Site" }, [ipPrinter]);
+    expect(db.getHistory("printer-10")).toHaveLength(1);
+    expect(db.getPrinterState("printer-10")?.identity.inventoryId).toBe("printer-10");
+    db.close();
+  });
 });

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS sites (
 CREATE TABLE IF NOT EXISTS printers (
   inventory_id TEXT PRIMARY KEY,
   site_id TEXT NOT NULL REFERENCES sites(id),
-  hostname TEXT NOT NULL,
+  hostname TEXT,
   display_name TEXT NOT NULL,
   location TEXT,
   enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),

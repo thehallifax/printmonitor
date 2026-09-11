@@ -14,7 +14,7 @@ cp config/inventory.example.yaml config/inventory.yaml
 chmod 600 .env config/inventory.yaml
 ```
 
-Edit `.env` and `config/inventory.yaml`. Use a read-only SNMP community, hostname-only inventory entries, matching `DATABASE_PATH` for both processes, and `INVENTORY_PATH=config/inventory.yaml`. The deployment template binds to `127.0.0.1:3010`; change `HOST` or `PORT` if required.
+Edit `.env` and `config/inventory.yaml`. Use a read-only SNMP community, one `hostname` or `ip` target per enabled inventory entry, matching `DATABASE_PATH` for both processes, and `INVENTORY_PATH=config/inventory.yaml`. Hostnames are preferred where reliable DNS exists; IP targets are available where printer DNS is not. The deployment template binds to `127.0.0.1:3010`; change `HOST` or `PORT` if required.
 
 Preview the installation without changing anything, then install:
 
@@ -86,4 +86,4 @@ git pull --ff-only
 ./scripts/update.sh
 ```
 
-Before upgrading, confirm `.env` and `config/inventory.yaml` contain the intended hostname-only production configuration. Never copy their example counterparts over existing operator files. The updater does not reset, clean, stash, or modify `.env`, inventory, SQLite data, logs, or private captures.
+Before upgrading, confirm `.env` and `config/inventory.yaml` contain the intended stable IDs and one hostname or IP target per enabled printer. Never copy their example counterparts over existing operator files. The updater does not reset, clean, stash, or modify `.env`, inventory, SQLite data, logs, or private captures.

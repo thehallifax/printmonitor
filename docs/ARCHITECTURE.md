@@ -29,8 +29,8 @@ Dependencies point inward: the API and collector use storage/shared; storage use
 
 ## Trust boundaries
 
-1. **Inventory/configuration:** operator-managed input. It is validated before use. Fixed IPv4 addresses are rejected so DNS remains authoritative at collection time.
-2. **DNS:** untrusted external resolution. Failure becomes an offline observation rather than an application exception. The resolved address is evidence for that collection cycle.
+1. **Inventory/configuration:** operator-managed input. Each enabled printer has a stable ID and exactly one simple connection target: hostname or IP. Hostnames are preferred where reliable DNS exists; fixed IP targets are supported where it does not.
+2. **DNS:** hostname targets use untrusted external resolution at every collection. Failure becomes an offline observation rather than an application exception. IP targets skip DNS and use the configured address directly.
 3. **Printer/SNMP:** untrusted network data. Missing and malformed values remain absent; normalization does not invent measurements. Raw varbind evidence is stored with each observation where practical.
 4. **SQLite:** the persistence boundary and the only source read by the API. SQL parameters are bound, not interpolated.
 5. **HTTP/browser:** no credentials are exposed to the browser. The browser has no path to a printer and cannot start collection.
@@ -69,7 +69,7 @@ Private OIDs must be declared and queried inside their vendor adapter. Storage, 
 
 - `schema_migrations(version, applied_at)`: applied migration ledger.
 - `sites(id, name, created_at, updated_at)`: site identity for future partitioning.
-- `printers(inventory_id, site_id, hostname, display_name, location, enabled, configured, timestamps)`: persistent inventory catalogue. Reconciliation updates mutable metadata by stable ID and marks absent entries unconfigured without deleting history.
+- `printers(inventory_id, site_id, hostname/target_type/target_value, display_name, location, enabled, configured, timestamps)`: persistent inventory catalogue. Reconciliation updates mutable metadata and connection target by stable ID and marks absent entries unconfigured without deleting history.
 - `collection_runs(id, timings, configured/attempted/reachable/unreachable/partial/failed counts, status, error)`: one record per collector cycle.
 - `observations(id, inventory_id, run_id, collected_at, reachable, normalized_health, resolved_ip, latency_ms, adapter, observation_json)`: immutable normalized history with raw evidence in JSON.
 - `latest_printer_state(inventory_id, observation_id, collected_at, reachable, normalized_health, resolved_ip, observation_json)`: materialized current state for API reads.

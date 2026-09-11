@@ -24,9 +24,13 @@ describe("inventory validation", () => {
     expect(first.printers[0]!.enabled).toBe(true);
   });
 
-  it("rejects fixed IPv4 addresses and duplicate hostnames", () => {
-    const fixedIp = `site: { id: site-a, name: Site A }\nprinters:\n  - { id: bad, hostname: 192.0.2.10, displayName: Bad }`;
-    expect(() => parseInventory(fixedIp)).toThrow(/DNS hostname/);
+  it("accepts IPv4 targets and rejects malformed or duplicate targets", () => {
+    const ipFleet = parseInventory(`site: { id: site-a, name: Site A }\nprinters:\n  - { id: ip, ip: 192.0.2.10, displayName: Library Copier }\n  - { id: host, hostname: printer.example.invalid, displayName: Reception Copier }`);
+    expect(ipFleet.printers[0]).toMatchObject({ ip: "192.0.2.10", targetType: "ip", targetValue: "192.0.2.10", displayName: "Library Copier" });
+    expect(() => parseInventory(`site: { id: site-a, name: Site A }\nprinters:\n  - { id: bad, ip: 192.0.2.0/24 }`)).toThrow(/IP address literal/);
+    expect(() => parseInventory(`site: { id: site-a, name: Site A }\nprinters:\n  - { id: bad, ip: 192.0.2.1-5 }`)).toThrow(/IP address literal/);
+    expect(() => parseInventory(`site: { id: site-a, name: Site A }\nprinters:\n  - { id: bad, hostname: printer.example.invalid, ip: 192.0.2.10 }`)).toThrow(/exactly one/);
+    expect(() => parseInventory(`site: { id: site-a, name: Site A }\nprinters:\n  - { id: bad }`)).toThrow(/exactly one/);
     const duplicate = `site: { id: site-a, name: Site A }\nprinters:\n  - { id: a, hostname: Print-A.example.invalid, displayName: A }\n  - { id: b, hostname: print-a.example.invalid, displayName: B }`;
     expect(() => parseInventory(duplicate)).toThrow(/duplicate canonical hostname/);
   });
@@ -36,7 +40,7 @@ describe("inventory validation", () => {
     expect(() => parseInventory(duplicate)).toThrow(/duplicate printer id/);
     const valid = parseInventory(`site: { id: site-a, name: Site A }\nprinters:\n  - { id: a, hostname: A.example.invalid }\n  - { id: b, hostname: b.example.invalid, enabled: false }`);
     expect(valid.printers).toMatchObject([
-      { inventoryId: "a", hostname: "a.example.invalid", displayName: "a.example.invalid", enabled: true },
+      { inventoryId: "a", hostname: "a.example.invalid", displayName: "", enabled: true },
       { inventoryId: "b", hostname: "b.example.invalid", enabled: false }
     ]);
     expect(parseInventory(`printers:\n  - { id: standalone, hostname: standalone.example.invalid }`).site).toEqual({ id: "default", name: "Default Site" });

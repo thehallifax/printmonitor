@@ -2,7 +2,7 @@
 
 The validation harness reads exactly one explicitly supplied target using either `--hostname` or `--ip`. Hostname mode performs one DNS lookup. Explicit-IP mode is diagnostic-only for a printer that lacks usable forward or reverse DNS; it skips DNS and accepts one IPv4 address only. Both modes use the same read-only SNMPv2c GET and subtree operations.
 
-Production inventory and normal fleet collection remain strictly hostname-based, and DNS remains mandatory for every normal collection attempt. Explicit-IP validation is held in memory, does not create or modify inventory, does not write fleet state, and never makes the IP a canonical printer identity.
+Production inventory supports exactly one hostname or IPv4 target per printer. Hostname fleet targets still require DNS resolution on every collection; IP fleet targets are polled directly. Explicit-IP validation remains a separate single-device diagnostic mode: it is held in memory, does not create or modify inventory, and does not write fleet state.
 
 ## Before a test
 

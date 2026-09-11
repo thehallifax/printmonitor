@@ -3,7 +3,10 @@ export type NormalizedHealth = (typeof HEALTH_STATES)[number];
 
 export interface PrinterIdentity {
   inventoryId: string;
-  hostname: string;
+  hostname?: string;
+  ip?: string;
+  targetType?: "hostname" | "ip";
+  targetValue?: string;
   resolvedIp?: string;
   displayName: string;
   location?: string;
@@ -146,7 +149,7 @@ export function compareFleetPriority(a: Pick<FleetPrinterState, "identity" | "op
   const healthDifference = operationalPriority[a.operationalState] - operationalPriority[b.operationalState];
   if (healthDifference) return healthDifference;
   if (a.isStale !== b.isStale) return a.isStale ? -1 : 1;
-  return (a.identity.displayName || a.identity.hostname).localeCompare(b.identity.displayName || b.identity.hostname, undefined, { sensitivity: "base" });
+  return (a.identity.displayName || a.identity.hostname || a.identity.ip || a.identity.inventoryId).localeCompare(b.identity.displayName || b.identity.hostname || b.identity.ip || b.identity.inventoryId, undefined, { sensitivity: "base" });
 }
 
 export function calculateLevelPercent(rawLevel?: number, rawMaximum?: number): number | undefined {

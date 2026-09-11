@@ -4,7 +4,7 @@
 
 The current collector supports SNMPv2c. The community is supplied through `SNMP_COMMUNITY`; it is never sent to the browser, stored in observations, or written to validation output. Configure the same value as read-only on each device. SNMPv3 is intentionally deferred.
 
-Every device is configured by hostname. Before each cycle the collector calls DNS and records the resolved address. A DNS error produces an offline observation with the resolver error code. A successful DNS lookup followed by an SNMP timeout records the resolved address and an SNMP failure reason.
+Each enabled device is configured by exactly one hostname or IP target. Hostname targets are resolved before each cycle and record the resolved address; a DNS error produces an offline observation with the resolver error code. IP targets skip DNS and poll the configured address directly. A successful hostname lookup or direct IP poll followed by an SNMP timeout records the SNMP failure reason.
 
 ## Standard OIDs
 

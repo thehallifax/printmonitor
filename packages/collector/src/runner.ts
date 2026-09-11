@@ -54,7 +54,7 @@ export async function collectFleet(
   try {
     const observations = await mapConcurrent(enabled, options.concurrency, async (printer) => {
       const identity: PrinterIdentity = {
-        inventoryId: printer.inventoryId, hostname: printer.hostname, displayName: printer.displayName, location: printer.location
+        inventoryId: printer.inventoryId, hostname: printer.hostname, ip: printer.ip, targetType: printer.targetType, targetValue: printer.targetValue, displayName: printer.displayName, location: printer.location
       };
       const resolution = await resolvePrinter(identity, resolveHost);
       if ("observation" in resolution) return resolution.observation;

@@ -182,7 +182,7 @@ export function normalizeRawSnmp(identity: PrinterIdentity, raw: RawSnmpData, la
   const standard: PrinterObservation = {
     identity: {
       ...identity,
-      displayName: identity.displayName || printerName || textValue(scalar(OIDS.sysName)) || identity.hostname,
+      displayName: identity.displayName || printerName || textValue(scalar(OIDS.sysName)) || identity.hostname || identity.ip || identity.inventoryId,
       manufacturer: genericIdentity.manufacturer,
       model,
       serialNumber: textValue(scalar(OIDS.prtGeneralSerialNumber))

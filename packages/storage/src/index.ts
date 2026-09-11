@@ -76,14 +76,14 @@ export class FleetDatabase {
     const now = new Date().toISOString();
     const saveSite = this.db.prepare(`INSERT INTO sites(id,name,created_at,updated_at) VALUES (?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`);
-    const savePrinter = this.db.prepare(`INSERT INTO printers(inventory_id,site_id,hostname,display_name,location,enabled,configured,created_at,updated_at)
-      VALUES (@inventoryId,@siteId,@hostname,@displayName,@location,@enabled,1,@createdAt,@updatedAt)
-      ON CONFLICT(inventory_id) DO UPDATE SET site_id=excluded.site_id, hostname=excluded.hostname, display_name=excluded.display_name,
+    const savePrinter = this.db.prepare(`INSERT INTO printers(inventory_id,site_id,hostname,target_type,target_value,display_name,location,enabled,configured,created_at,updated_at)
+      VALUES (@inventoryId,@siteId,@hostname,@targetType,@targetValue,@displayName,@location,@enabled,1,@createdAt,@updatedAt)
+      ON CONFLICT(inventory_id) DO UPDATE SET site_id=excluded.site_id, hostname=excluded.hostname, target_type=excluded.target_type, target_value=excluded.target_value, display_name=excluded.display_name,
       location=excluded.location, enabled=excluded.enabled, configured=1, updated_at=excluded.updated_at`);
     this.db.transaction(() => {
       saveSite.run(site.id, site.name, now, now);
       this.db.prepare("UPDATE printers SET configured=0, enabled=0, updated_at=? WHERE site_id=?").run(now, site.id);
-      for (const printer of printers) savePrinter.run({ ...printer, location: printer.location ?? null, enabled: Number(printer.enabled), createdAt: now, updatedAt: now });
+      for (const printer of printers) savePrinter.run({ ...printer, targetType: printer.targetType ?? (printer.ip ? "ip" : "hostname"), targetValue: printer.targetValue ?? printer.ip ?? printer.hostname, location: printer.location ?? null, enabled: Number(printer.enabled), createdAt: now, updatedAt: now });
     })();
   }
 
@@ -159,14 +159,14 @@ export class FleetDatabase {
   }
 
   getPrinterState(id: string, pollIntervalSeconds = 300, now = new Date()): FleetPrinterState | undefined {
-    const row = this.db.prepare(`SELECT l.observation_json, p.inventory_id, p.hostname, p.display_name, p.location,
+    const row = this.db.prepare(`SELECT l.observation_json, p.inventory_id, p.hostname, p.target_type, p.target_value, p.display_name, p.location,
       p.enabled, p.configured, p.created_at, p.site_id, s.name AS site_name,
       (SELECT MAX(o.collected_at) FROM observations o WHERE o.inventory_id=p.inventory_id AND o.reachable=1) AS last_successful_at
       FROM printers p JOIN sites s ON s.id=p.site_id LEFT JOIN latest_printer_state l ON l.inventory_id=p.inventory_id
-      WHERE p.inventory_id=?`).get(id) as { observation_json: string | null; inventory_id: string; hostname: string; display_name: string; location: string | null; enabled: number; configured: number; created_at: string; site_id: string; site_name: string; last_successful_at: string | null } | undefined;
+      WHERE p.inventory_id=?`).get(id) as { observation_json: string | null; inventory_id: string; hostname: string | null; target_type: "hostname" | "ip"; target_value: string; display_name: string; location: string | null; enabled: number; configured: number; created_at: string; site_id: string; site_name: string; last_successful_at: string | null } | undefined;
     if (!row) return undefined;
     if (!row.observation_json) return {
-      identity: { inventoryId: row.inventory_id, hostname: row.hostname, displayName: row.display_name, location: row.location ?? undefined },
+      identity: { inventoryId: row.inventory_id, ...(row.hostname ? { hostname: row.hostname } : { ip: row.target_value }), targetType: row.target_type, targetValue: row.target_value, displayName: row.display_name, location: row.location ?? undefined },
       site: { id: row.site_id, name: row.site_name }, enabled: Boolean(row.enabled), configured: Boolean(row.configured),
       configuredAt: row.created_at, operationalState: "pending", reachability: null, consumables: [], alerts: [], counters: {},
       normalizedHealth: "unknown", collectedAt: null, provenance: null, isStale: false, staleSince: null, ageSeconds: null,
@@ -178,7 +178,9 @@ export class FleetDatabase {
       ...observation,
       identity: {
         ...observation.identity,
-        hostname: row.hostname,
+        ...(row.hostname ? { hostname: row.hostname } : { ip: row.target_value }),
+        targetType: row.target_type,
+        targetValue: row.target_value,
         displayName: row.display_name,
         location: row.location ?? undefined
       },

@@ -21,7 +21,7 @@ describe("schema migrations", () => {
 
     const migrated = new FleetDatabase(path);
     expect(migrated.db.prepare("SELECT version FROM schema_migrations ORDER BY version").all()).toEqual([
-      { version: "001_initial.sql" }, { version: "002_fleet_hardening.sql" }, { version: "003_inventory_runtime.sql" }
+      { version: "001_initial.sql" }, { version: "002_fleet_hardening.sql" }, { version: "003_inventory_runtime.sql" }, { version: "004_inventory_targets.sql" }
     ]);
     expect((migrated.db.prepare("PRAGMA table_info(printers)").all() as { name: string }[]).map((column) => column.name)).toContain("configured");
     expect(migrated.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='collector_runtime'").get()).toEqual({ name: "collector_runtime" });

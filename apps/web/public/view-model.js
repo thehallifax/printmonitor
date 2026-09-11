@@ -91,7 +91,7 @@ export function failureLabel(kind) {
 export function filterFleet(printers, filters) {
   const search = filters.search.trim().toLowerCase();
   return printers.filter((printer) => {
-    const searchable = [printer.identity.displayName, printer.identity.hostname, printer.identity.manufacturer, printer.identity.model, printer.site?.name, printer.identity.location].filter(Boolean).join(" ").toLowerCase();
+    const searchable = [printer.identity.displayName, printer.identity.hostname, printer.identity.ip, printer.identity.manufacturer, printer.identity.model, printer.site?.name, printer.identity.location].filter(Boolean).join(" ").toLowerCase();
     if (search && !searchable.includes(search)) return false;
     if (filters.site && printer.site?.id !== filters.site) return false;
     if (filters.state === "stale" && !printer.isStale) return false;

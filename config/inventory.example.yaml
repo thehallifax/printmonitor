@@ -14,3 +14,9 @@ printers:
     displayName: Office Printer
     location: Administration
     enabled: false
+
+  - id: example-campus-archive
+    ip: 192.0.2.102
+    displayName: Archive Copier
+    location: Archive
+    enabled: false
