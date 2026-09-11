@@ -56,31 +56,42 @@ cd printmonitor
 cp .env.example .env
 cp config/inventory.example.yaml config/inventory.yaml
 # Edit .env and config/inventory.yaml before continuing.
+./scripts/install.sh --dry-run
 ./scripts/install.sh
+./scripts/status.sh
 ```
 
 The installer validates configuration, installs locked dependencies, builds the project, and installs separate per-user launchd agents for the API/web process and collector. It is idempotent and never overwrites an existing `.env`, inventory, database, or log. The documented default is <http://127.0.0.1:3010>; installation and status output use the effective `HOST` and `PORT`.
 
+For an existing installation, use the single update workflow:
+
+```bash
+~/printmonitor/scripts/update.sh
+# or, from the repository:
+./scripts/update.sh
+```
+
+`update.sh` safely performs the fast-forward-only pull, locked dependency install, build, tests, service restart, status verification, and local API health verification. Normal updates run tests. Use `./scripts/update.sh --verbose` for detailed command output, or use `./scripts/update.sh --skip-tests` only as an explicitly accepted faster path. The scripts resolve Node/npm themselves; do not source NVM or other interactive shell setup. See [Deployment](docs/DEPLOYMENT.md) for service labels, log paths, upgrades, and troubleshooting.
+
+For routine operations:
+
 ```bash
 ./scripts/status.sh
 ./scripts/restart.sh
-./scripts/update.sh
 ./scripts/uninstall.sh
 ```
 
-`update.sh` performs a fast-forward-only pull, locked dependency install, build, tests, safe service restart, and local API health check. It can reuse the Node installation recorded in launchd and derive its matching npm executable, so a fresh shell does not need NVM initialization. Uninstall removes only the launchd definitions; operator configuration, SQLite data, and logs remain in place. See [Deployment](docs/DEPLOYMENT.md) for service labels, log paths, upgrades, and troubleshooting.
+Uninstall removes only the launchd definitions; operator configuration, SQLite data, and logs remain in place.
 
-## Foreground mode
+## Foreground/development run
 
 Run both the API/web process and collector watch loop in one terminal without installing services:
 
 ```bash
-npm ci
-npm run build
 ./scripts/run.sh
 ```
 
-`run.sh` safely parses the repository-root `.env` without shell evaluation, forwards `SIGINT`/`SIGTERM`, and stops the other child if either process exits. Exported environment variables override `.env`, which overrides documented defaults. All supported launch paths resolve relative inventory and database paths from the repository root.
+This foreground mode is for development or supervised troubleshooting; it is not required for a normal launchd deployment. `run.sh` safely parses the repository-root `.env` without shell evaluation, forwards `SIGINT`/`SIGTERM`, and stops the other child if either process exits. Exported environment variables override `.env`, which overrides documented defaults. All supported launch paths resolve relative inventory and database paths from the repository root.
 
 For a UI-only local demo with fictional stored records:
 
@@ -114,7 +125,7 @@ Important settings are `SNMP_COMMUNITY`, `INVENTORY_PATH`, `DATABASE_PATH`, `POL
 
 Fleet cards show priority-ordered operational state, K/C/M/Y levels, concise maintenance and alert summaries, page count, and recency. Summary metrics and the State selector filter the already-loaded stored fleet; dashboard refreshes are API reads, not printer polls.
 
-Printer Detail exposes identity, reachability, health, completeness, all supply evidence, alerts, counters, and bounded recent history. The fictional example below includes toner, imaging-unit, and fuser evidence.
+Printer Detail exposes identity, reachability, health, completeness, all supply evidence, alerts, counters, and bounded recent history. It initially shows the latest 12 fetched observations; Show more exposes the rest of that fetched recent history. Underlying observations remain stored, with no destructive retention/downsampling currently applied. The fictional example below includes toner, imaging-unit, and fuser evidence.
 
 ![Printer Detail populated with fictional supply, alert, counter, and history evidence](docs/images/printer-detail.png)
 
@@ -127,16 +138,17 @@ Printer Detail exposes identity, reachability, health, completeness, all supply 
 - `GET /api/printers/:id/history?limit=25` — bounded recent history, capped at 100
 - `GET /api/runs` and `GET /api/runs/:id` — collection-run diagnostics
 
-## Useful commands
+## Developer and diagnostic commands
+
+The direct npm commands below are for development, testing, and explicitly intentional diagnostics. Deployed lifecycle operations use the scripts above and launchd.
 
 ```bash
 npm test
 npm run typecheck
 npm run build
 npm audit
-./scripts/update.sh                       # safe installed-service update
-npm run collect                         # one intentional collection cycle
-npm run collect -- --watch              # background-style watch loop
+npm run collect                         # one intentional diagnostic cycle
+npm run collect -- --watch              # development/diagnostic watch loop
 npm run validate:printer -- --hostname <name>
 npm run validate:printer -- --ip <IPv4> # diagnostic-only; DNS is skipped
 ```

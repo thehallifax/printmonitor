@@ -26,7 +26,9 @@ Preview the installation without changing anything, then install:
 
 The installer is idempotent. It runs `npm ci` and the build again, refreshes generated service definitions, and restarts the two agents, but never replaces an existing `.env` or `config/inventory.yaml`. It does not remove or recreate the SQLite database or truncate logs. Do not run it with `sudo`; per-user LaunchAgents require the target user's session.
 
-## Foreground operation
+## Foreground/development operation
+
+This mode is optional and is not required for a normal launchd deployment. Use it for local development or supervised troubleshooting only.
 
 To run both processes in one terminal without installing launchd jobs:
 
@@ -75,7 +77,7 @@ For normal upgrades after `scripts/update.sh` is present in the checkout, log in
 
 The updater refuses tracked local modifications, uses `git pull --ff-only`, runs `npm ci`, builds and tests before restarting either service, verifies both launchd jobs, and checks the local API. Use `--verbose` to show successful command output or `--skip-tests` only for an explicitly accepted expedited update. Failures display the captured command output and leave currently running services untouched until the restart stage.
 
-The first upgrade from a version that predates `update.sh` still needs a one-time fast-forward pull from the existing checkout:
+The first upgrade from a version that predates `update.sh` still needs a one-time fast-forward pull from the existing checkout. This bootstrap is not the normal update procedure:
 
 ```bash
 cd "/absolute/path/to/printmonitor"

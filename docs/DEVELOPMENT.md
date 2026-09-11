@@ -1,5 +1,7 @@
 # Development
 
+The commands in this document are developer workflows. Operators use `scripts/install.sh`, `scripts/update.sh`, `scripts/status.sh`, `scripts/restart.sh`, and `scripts/uninstall.sh` for the managed launchd lifecycle.
+
 ## Setup
 
 ```bash
