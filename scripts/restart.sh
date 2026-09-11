@@ -11,10 +11,19 @@ if [ ! -f "$WEB_PLIST" ] || [ ! -f "$COLLECTOR_PLIST" ]; then
   exit 1
 fi
 
-launchctl bootout "$(service_target "$WEB_LABEL")" >/dev/null 2>&1 || true
-launchctl bootout "$(service_target "$COLLECTOR_LABEL")" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$(id -u)" "$WEB_PLIST"
-launchctl bootstrap "gui/$(id -u)" "$COLLECTOR_PLIST"
+restart_service() {
+  label=$1
+  plist=$2
+  target=$(service_target "$label")
+  if launchctl print "$target" >/dev/null 2>&1; then
+    launchctl kickstart -k "$target"
+  else
+    launchctl bootstrap "gui/$(id -u)" "$plist"
+  fi
+}
+
+restart_service "$WEB_LABEL" "$WEB_PLIST"
+restart_service "$COLLECTOR_LABEL" "$COLLECTOR_PLIST"
 
 echo "Printer Fleet Monitor services restarted."
 "$SCRIPT_DIRECTORY/status.sh"

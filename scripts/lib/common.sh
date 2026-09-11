@@ -8,6 +8,7 @@ LAUNCH_AGENT_DIRECTORY="$HOME/Library/LaunchAgents"
 WEB_PLIST="$LAUNCH_AGENT_DIRECTORY/$WEB_LABEL.plist"
 COLLECTOR_PLIST="$LAUNCH_AGENT_DIRECTORY/$COLLECTOR_LABEL.plist"
 LOG_DIRECTORY="$PROJECT_ROOT/data/log"
+PLIST_BUDDY=${PLIST_BUDDY:-/usr/libexec/PlistBuddy}
 
 require_macos() {
   if [ "$(uname -s)" != "Darwin" ]; then
@@ -28,19 +29,55 @@ service_target() {
 }
 
 show_effective_configuration() {
-  node "$PROJECT_ROOT/scripts/project-env.mjs" describe "$PROJECT_ROOT"
+  node_executable=$(resolve_node_executable) || exit 1
+  "$node_executable" "$PROJECT_ROOT/scripts/project-env.mjs" describe "$PROJECT_ROOT"
+}
+
+installed_node_executable() {
+  if [ ! -x "$PLIST_BUDDY" ]; then
+    return 1
+  fi
+
+  for plist in "$WEB_PLIST" "$COLLECTOR_PLIST"; do
+    if [ ! -f "$plist" ]; then
+      continue
+    fi
+    candidate=$("$PLIST_BUDDY" -c "Print :ProgramArguments:0" "$plist" 2>/dev/null || true)
+    case "$candidate" in
+      /*)
+        if [ -x "$candidate" ]; then
+          printf '%s\n' "$candidate"
+          return 0
+        fi
+        ;;
+    esac
+  done
+  return 1
+}
+
+resolve_node_executable() {
+  if candidate=$(installed_node_executable); then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  if candidate=$(command -v node 2>/dev/null) && [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  echo "Unable to find a Node.js executable. Install Node.js 22.12 or newer, or rerun ./scripts/install.sh from a shell where node is available." >&2
+  return 1
 }
 
 load_installed_web_address() {
-  if [ ! -f "$WEB_PLIST" ] || [ ! -x /usr/libexec/PlistBuddy ]; then
+  if [ ! -f "$WEB_PLIST" ] || [ ! -x "$PLIST_BUDDY" ]; then
     return
   fi
   if [ "${HOST+x}" != x ]; then
-    installed_host=$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:HOST" "$WEB_PLIST" 2>/dev/null || true)
+    installed_host=$("$PLIST_BUDDY" -c "Print :EnvironmentVariables:HOST" "$WEB_PLIST" 2>/dev/null || true)
     if [ -n "$installed_host" ]; then HOST=$installed_host; export HOST; fi
   fi
   if [ "${PORT+x}" != x ]; then
-    installed_port=$(/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:PORT" "$WEB_PLIST" 2>/dev/null || true)
+    installed_port=$("$PLIST_BUDDY" -c "Print :EnvironmentVariables:PORT" "$WEB_PLIST" 2>/dev/null || true)
     if [ -n "$installed_port" ]; then PORT=$installed_port; export PORT; fi
   fi
 }
