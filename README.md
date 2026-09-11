@@ -1,10 +1,10 @@
 # Printer Fleet Monitor
 
-Printer Fleet Monitor is a small, vendor-neutral service for monitoring network printers and multifunction devices. A background collector reads configured hostname or IP targets over read-only SNMP, normalizes the results, and caches them in SQLite. The Fastify API and browser dashboard read that stored state only: viewing the dashboard never contacts a printer or starts a collection.
+Printer Fleet Monitor is a self-hosted, multi-vendor monitor for network printers and multifunction devices. It gives operators one compact dashboard for fleet health, reachability, toner, counters, alerts, freshness, filtering, device detail, and recent history. A background collector reads printers over read-only SNMP and caches normalized observations in SQLite; the dashboard and API read only that cached state and never synchronously poll a printer.
 
 ![Fleet dashboard populated with fictional demo printers](docs/images/fleet-dashboard.png)
 
-## What it monitors
+## Highlights
 
 - Reachability, health, freshness, and never-collected state as separate signals
 - Toner/ink and maintenance supplies, including unknown or device-specific raw levels
@@ -34,17 +34,17 @@ Reachability answers whether the latest SNMP attempt received a response. Health
 
 The supported single-node runtime is one collector writer and one API/web process sharing a local SQLite database. On macOS, launchd supervises them as independent services, so either can restart without coupling its lifecycle to the other. See [Architecture](docs/ARCHITECTURE.md) for the component and storage boundaries.
 
-## Vendor evidence
+## Vendor support
 
-The generic collector uses SNMPv2-MIB, HOST-RESOURCES-MIB, and Printer-MIB. Vendor adapters normalize standard evidence behind shared contracts; they do not currently add private enterprise-OID queries.
+Live validation currently covers Konica Minolta and FUJIFILM devices. The generic collector uses SNMPv2-MIB, HOST-RESOURCES-MIB, and Printer-MIB, while the adapter architecture provides a controlled path for additional vendors. Vendor adapters normalize standard evidence behind shared contracts; they do not currently add private enterprise-OID queries.
 
 | Vendor | Repository evidence |
 | --- | --- |
 | Konica Minolta | Sanitized fixture regressions for bizhub C3321i, C301i, C451i, and C251i; enterprise OID `18334` selects the adapter. |
 | FUJIFILM | Sanitized Apeos C3567 fixture through the generic standard-MIB path. |
-| Ricoh | Enterprise OID `367` adapter-detection and deterministic synthetic coverage. |
-| Canon | Enterprise OID `1602` adapter-detection and deterministic synthetic coverage. |
-| Kyocera | Enterprise OID `1347`/identity adapter-detection and deterministic synthetic coverage. |
+| Ricoh | Enterprise OID `367` adapter detection and deterministic synthetic coverage; live validation pending. |
+| Canon | Enterprise OID `1602` adapter detection and deterministic synthetic coverage; live validation pending. |
+| Kyocera | Enterprise OID `1347`/identity adapter detection and deterministic synthetic coverage; live validation pending. |
 
 “Fixture” means sanitized evidence committed under `packages/collector/test/fixtures/`; it is not a claim that every model or firmware behaves identically.
 
@@ -65,7 +65,22 @@ cp config/inventory.example.yaml config/inventory.yaml
 
 The installer validates configuration, installs locked dependencies, builds the project, and installs separate per-user launchd agents for the API/web process and collector. It is idempotent and never overwrites an existing `.env`, inventory, database, or log. The documented default is <http://127.0.0.1:3010>; installation and status output use the effective `HOST` and `PORT`.
 
-For an existing installation, use the single update workflow:
+## Operate and update
+
+Installed services run in the background, so Terminal can be closed. They are per-user LaunchAgents and normally start after the installing user logs in following a reboot; they are not pre-login system daemons.
+
+| Command | Purpose |
+| --- | --- |
+| `./scripts/install.sh` | Perform the initial build and install the background services. |
+| `./scripts/start.sh` | Start services that are already installed. |
+| `./scripts/stop.sh` | Stop/unload services while retaining their installation, configuration, and data. |
+| `./scripts/restart.sh` | Restart the installed services. |
+| `./scripts/status.sh` | Show current service state, dashboard URL, and log paths. |
+| `./scripts/update.sh` | Perform the normal application update workflow. |
+| `./scripts/uninstall.sh` | Remove the launchd installation while preserving operator configuration and data. |
+| `./scripts/run.sh` | Run the API/web and collector manually in the foreground. |
+
+For an existing installation, the canonical update command is:
 
 ```bash
 ~/printmonitor/scripts/update.sh
@@ -75,19 +90,7 @@ For an existing installation, use the single update workflow:
 
 `update.sh` safely performs the fast-forward-only pull, locked dependency install, build, tests, service restart, status verification, and local API health verification. Normal updates run tests. Use `./scripts/update.sh --verbose` for detailed command output, or use `./scripts/update.sh --skip-tests` only as an explicitly accepted faster path. The scripts resolve Node/npm themselves; do not source NVM or other interactive shell setup. See [Deployment](docs/DEPLOYMENT.md) for service labels, log paths, upgrades, and troubleshooting.
 
-For routine operations:
-
-```bash
-./scripts/start.sh
-./scripts/stop.sh
-./scripts/status.sh
-./scripts/restart.sh
-./scripts/uninstall.sh
-```
-
-`start.sh` starts an existing installation without rebuilding or reinstalling; `stop.sh` unloads the services while leaving their plist definitions installed. `uninstall.sh` removes those launchd definitions, while preserving operator configuration, SQLite data, and logs. Installed services run in the background, so Terminal can be closed. Because they are per-user LaunchAgents, they normally start when the installing user logs in after a reboot, not before login.
-
-## Foreground/development run
+## Foreground run
 
 Run both the API/web process and collector watch loop in one terminal without installing services:
 
@@ -95,7 +98,7 @@ Run both the API/web process and collector watch loop in one terminal without in
 ./scripts/run.sh
 ```
 
-This foreground mode is for development or supervised troubleshooting; it is not required for a normal launchd deployment. `run.sh` safely parses the repository-root `.env` without shell evaluation, forwards `SIGINT`/`SIGTERM`, and stops the other child if either process exits. Exported environment variables override `.env`, which overrides documented defaults. All supported launch paths resolve relative inventory and database paths from the repository root.
+This foreground mode is for development or supervised troubleshooting; Terminal must remain open, and it is not required for a normal launchd deployment. `run.sh` safely parses the repository-root `.env` without shell evaluation, forwards `SIGINT`/`SIGTERM`, and stops the other child if either process exits. Exported environment variables override `.env`, which overrides documented defaults. All supported launch paths resolve relative inventory and database paths from the repository root.
 
 For a UI-only local demo with fictional stored records:
 
@@ -112,6 +115,10 @@ The demo uses `.invalid` hostnames, RFC 5737 documentation addresses, and `EXAMP
 Keep `.env` and `config/inventory.yaml` out of source control: they can contain an SNMP credential and site-identifying data. Use a read-only SNMP community. `INVENTORY_PATH` must point to the operator inventory, not the committed example.
 
 ```yaml
+site:
+  id: example-campus
+  name: Example Campus
+
 printers:
   - id: reception
     hostname: reception-printer.example.invalid
@@ -136,7 +143,7 @@ Important settings are `SNMP_COMMUNITY`, `INVENTORY_PATH`, `DATABASE_PATH`, `POL
 
 Fleet cards show priority-ordered operational state, K/C/M/Y levels, concise maintenance and alert summaries, page count, and recency. Summary metrics and the State selector filter the already-loaded stored fleet; dashboard refreshes are API reads, not printer polls.
 
-Printer Detail exposes identity, reachability, health, completeness, all supply evidence, alerts, counters, and bounded recent history. It initially shows the latest 12 fetched observations; Show more exposes the rest of that fetched recent history. Underlying observations remain stored, with no destructive retention/downsampling currently applied. The fictional example below includes toner, imaging-unit, and fuser evidence.
+Printer Detail exposes identity, reachability, health, completeness, all supply evidence, alerts, counters, and bounded recent history. It initially shows the latest 12 fetched observations; Show more exposes the rest of that fetched recent history. Underlying observations remain stored, with no destructive retention/downsampling currently applied. Forecasting, toner-consumption intelligence, replacement detection, and long-term trend analysis are future work. The fictional example below includes toner, imaging-unit, and fuser evidence.
 
 ![Printer Detail populated with fictional supply, alert, counter, and history evidence](docs/images/printer-detail.png)
 
@@ -149,20 +156,9 @@ Printer Detail exposes identity, reachability, health, completeness, all supply 
 - `GET /api/printers/:id/history?limit=25` — bounded recent history, capped at 100
 - `GET /api/runs` and `GET /api/runs/:id` — collection-run diagnostics
 
-## Developer and diagnostic commands
+## Development and diagnostics
 
-The direct npm commands below are for development, testing, and explicitly intentional diagnostics. Deployed lifecycle operations use the scripts above and launchd.
-
-```bash
-npm test
-npm run typecheck
-npm run build
-npm audit
-npm run collect                         # one intentional diagnostic cycle
-npm run collect -- --watch              # development/diagnostic watch loop
-npm run validate:printer -- --hostname <name>
-npm run validate:printer -- --ip <IPv4> # diagnostic-only; DNS is skipped
-```
+Normal operators use the lifecycle commands above. See [Development](docs/DEVELOPMENT.md) for local builds, tests, demo data, and direct collector commands; see [controlled live validation](docs/LIVE_VALIDATION.md) for the explicitly authorized single-printer diagnostic workflow.
 
 ## Security model
 
@@ -182,4 +178,4 @@ See [SNMP behavior](docs/SNMP.md) and [controlled live validation](docs/LIVE_VAL
 - SNMP response is the reachability signal; there is no independent ICMP/TCP probe.
 - Production IP targets are individual IPv4 literals only; CIDRs and ranges are not supported.
 - No authentication, notifications, network discovery, traps, or multi-site control plane.
-- SQLite is intended for one local collector writer, not concurrent writers across hosts.
+- The supported deployment is one local SQLite database with one collector writer; multiple simultaneous collectors against the same database are unsupported.
