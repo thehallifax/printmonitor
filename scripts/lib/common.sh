@@ -20,13 +20,53 @@ require_macos() {
 
 require_non_root() {
   if [ "$(id -u)" -eq 0 ]; then
-    echo "Run this installer as the account that will own the services, not as root." >&2
+    echo "Run this command as the account that owns the services, not as root." >&2
     exit 1
   fi
 }
 
+service_domain() {
+  printf 'gui/%s\n' "$(id -u)"
+}
+
 service_target() {
-  printf 'gui/%s/%s\n' "$(id -u)" "$1"
+  printf '%s/%s\n' "$(service_domain)" "$1"
+}
+
+require_installed_services() {
+  if [ ! -f "$WEB_PLIST" ] || [ ! -f "$COLLECTOR_PLIST" ]; then
+    echo "Printer Fleet Monitor services are not installed. Run ./scripts/install.sh first." >&2
+    exit 1
+  fi
+}
+
+start_launchd_service() {
+  label=$1
+  plist=$2
+  target=$(service_target "$label")
+  if details=$(launchctl print "$target" 2>/dev/null); then
+    if printf '%s\n' "$details" | grep -q 'state = running'; then
+      return 0
+    fi
+    launchctl kickstart "$target"
+  else
+    launchctl bootstrap "$(service_domain)" "$plist"
+  fi
+}
+
+stop_launchd_service() {
+  launchctl bootout "$(service_target "$1")" >/dev/null 2>&1 || true
+}
+
+restart_launchd_service() {
+  label=$1
+  plist=$2
+  target=$(service_target "$label")
+  if launchctl print "$target" >/dev/null 2>&1; then
+    launchctl kickstart -k "$target"
+  else
+    launchctl bootstrap "$(service_domain)" "$plist"
+  fi
 }
 
 show_effective_configuration() {

@@ -78,12 +78,14 @@ For an existing installation, use the single update workflow:
 For routine operations:
 
 ```bash
+./scripts/start.sh
+./scripts/stop.sh
 ./scripts/status.sh
 ./scripts/restart.sh
 ./scripts/uninstall.sh
 ```
 
-Uninstall removes only the launchd definitions; operator configuration, SQLite data, and logs remain in place.
+`start.sh` starts an existing installation without rebuilding or reinstalling; `stop.sh` unloads the services while leaving their plist definitions installed. `uninstall.sh` removes those launchd definitions, while preserving operator configuration, SQLite data, and logs. Installed services run in the background, so Terminal can be closed. Because they are per-user LaunchAgents, they normally start when the installing user logs in after a reboot, not before login.
 
 ## Foreground/development run
 

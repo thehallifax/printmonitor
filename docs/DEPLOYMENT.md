@@ -26,6 +26,8 @@ Preview the installation without changing anything, then install:
 
 The installer is idempotent. It runs `npm ci` and the build again, refreshes generated service definitions, and restarts the two agents, but never replaces an existing `.env` or `config/inventory.yaml`. It does not remove or recreate the SQLite database or truncate logs. Do not run it with `sudo`; per-user LaunchAgents require the target user's session.
 
+Once installed, both services run in the background and Terminal can be closed. These are per-user LaunchAgents: they normally start when the installing user logs in after a reboot, not as pre-login system services.
+
 ## Foreground/development operation
 
 This mode is optional and is not required for a normal launchd deployment. Use it for local development or supervised troubleshooting only.
@@ -58,14 +60,18 @@ Logs are append-only launchd stdout/stderr files under `data/log/`:
 
 Management scripts first reuse the absolute Node executable stored in an installed plist, then check an existing NVM installation and standard Homebrew locations before falling back to the non-interactive command `PATH`. npm is resolved beside that selected Node installation and run with the matching Node directory prepended to `PATH`. They do not source shell profiles, NVM initialization, or Homebrew shell setup.
 
-## Restart and uninstall
+## Start, stop, restart, and uninstall
 
 ```bash
+./scripts/start.sh
+./scripts/stop.sh
 ./scripts/restart.sh
 ./scripts/uninstall.sh
 ```
 
-Restart uses launchd's native `kickstart -k` operation for loaded agents and bootstraps an agent only when its plist is installed but the job is not loaded. This avoids an unload/reload race. Uninstall unloads the agents and removes only their generated plist files. It deliberately preserves `.env`, `config/inventory.yaml`, `data/` (including SQLite), and all logs.
+Start requires an existing installation and loads or starts both jobs without installing dependencies, rebuilding, or modifying configuration. Stop unloads both jobs, preventing `KeepAlive` from relaunching them, but leaves their plist files installed so Start can restore them. Both commands are idempotent.
+
+Restart uses launchd's native `kickstart -k` operation for loaded agents and bootstraps an agent only when its plist is installed but the job is not loaded. This avoids an unload/reload race. Uninstall is distinct from Stop: it unloads the agents and removes their generated plist files. It deliberately preserves `.env`, `config/inventory.yaml`, `data/` (including SQLite), and all logs.
 
 ## Upgrade an existing cacheadmin deployment
 

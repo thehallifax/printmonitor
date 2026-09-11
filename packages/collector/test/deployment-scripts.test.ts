@@ -32,12 +32,13 @@ function statusFixture({ installed, nodeOnPath }: { installed: boolean; nodeOnPa
   mkdirSync(launchAgents, { recursive: true });
   mkdirSync(bin);
   mkdirSync(runtimeBin, { recursive: true });
-  for (const file of ["status.sh", "restart.sh", "update.sh", "project-env.mjs"]) cpSync(join(sourceRoot, "scripts", file), join(root, "scripts", file));
+  for (const file of ["status.sh", "start.sh", "stop.sh", "restart.sh", "update.sh", "project-env.mjs"]) cpSync(join(sourceRoot, "scripts", file), join(root, "scripts", file));
   cpSync(join(sourceRoot, "scripts/lib/common.sh"), join(root, "scripts/lib/common.sh"));
   symlinkSync(join(sourceRoot, "node_modules"), join(root, "node_modules"), "dir");
   writeFileSync(join(root, ".env"), "SNMP_COMMUNITY=never-display-this\nHOST=127.0.0.1\nPORT=3010\n");
 
   symlinkSync("/usr/bin/awk", join(bin, "awk"));
+  symlinkSync("/usr/bin/grep", join(bin, "grep"));
   symlinkSync("/usr/bin/dirname", join(bin, "dirname"));
   symlinkSync("/usr/bin/mktemp", join(bin, "mktemp"));
   symlinkSync("/bin/cat", join(bin, "cat"));
@@ -48,7 +49,7 @@ function statusFixture({ installed, nodeOnPath }: { installed: boolean; nodeOnPa
   symlinkSync(process.execPath, join(runtimeBin, "node"));
   writeExecutable(join(bin, "uname"), "#!/bin/sh\necho Darwin\n");
   writeExecutable(join(bin, "id"), "#!/bin/sh\nif [ \"${1:-}\" = -u ]; then echo 501; else echo fixture; fi\n");
-  writeExecutable(join(bin, "launchctl"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$LAUNCHCTL_LOG\"\nif [ \"${1:-}\" = print ] && [ \"${FAKE_SERVICES_INSTALLED:-0}\" = 1 ]; then printf '    state = running\\n    pid = 4321\\n'; exit 0; fi\nif [ \"${1:-}\" = print ]; then exit 1; fi\n");
+  writeExecutable(join(bin, "launchctl"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$LAUNCHCTL_LOG\"\nif [ \"${1:-}\" = print ] && [ \"${FAKE_SERVICES_LOADED:-0}\" = 1 ]; then printf '    state = %s\\n' \"${FAKE_SERVICE_STATE:-running}\"; if [ \"${FAKE_SERVICE_STATE:-running}\" = running ]; then printf '    pid = 4321\\n'; fi; exit 0; fi\nif [ \"${1:-}\" = print ]; then exit 1; fi\n");
   writeExecutable(join(bin, "git"), [
     "#!/bin/sh",
     "case \"$*\" in",
@@ -82,6 +83,7 @@ function statusFixture({ installed, nodeOnPath }: { installed: boolean; nodeOnPa
       FIXTURE_NODE: join(runtimeBin, "node"),
       FIXTURE_ROOT: root,
       FAKE_SERVICES_INSTALLED: installed ? "1" : "0",
+      FAKE_SERVICES_LOADED: installed ? "1" : "0",
       LAUNCHCTL_LOG: join(root, "launchctl.log"),
       NPM_LOG: join(root, "npm.log")
     }
@@ -373,7 +375,7 @@ describe("safe application update", () => {
 
 describe("deployment shell entry points", () => {
   const root = resolve(testDirectory, "../../..");
-  const scripts = ["run.sh", "install.sh", "uninstall.sh", "status.sh", "restart.sh", "update.sh"];
+  const scripts = ["run.sh", "install.sh", "start.sh", "stop.sh", "uninstall.sh", "status.sh", "restart.sh", "update.sh"];
 
   it.each(scripts)("%s is executable and passes POSIX shell syntax validation", (name) => {
     const path = join(root, "scripts", name);
@@ -392,9 +394,51 @@ describe("deployment shell entry points", () => {
 
   it("restarts loaded jobs with launchctl-native kickstart and does not unload them", () => {
     const restart = readFileSync(join(root, "scripts/restart.sh"), "utf8");
-    expect(restart).toContain("launchctl kickstart -k");
-    expect(restart).toContain("launchctl bootstrap");
+    const common = readFileSync(join(root, "scripts/lib/common.sh"), "utf8");
+    expect(restart).toContain("restart_launchd_service");
+    expect(common).toContain("launchctl kickstart -k");
+    expect(common).toContain("launchctl bootstrap");
     expect(restart).not.toContain("launchctl bootout");
+  });
+
+  it("starts installed unloaded jobs without rebuilding or reinstalling", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = spawnSync("/bin/sh", [join(fixture.root, "scripts/start.sh")], { encoding: "utf8", env: { ...fixture.environment, FAKE_SERVICES_LOADED: "0" } });
+    const calls = readFileSync(fixture.environment.LAUNCHCTL_LOG, "utf8");
+    expect(result.status).toBe(0);
+    expect(calls).toContain(`bootstrap gui/501 ${join(fixture.environment.HOME, `Library/LaunchAgents/${WEB_LABEL}.plist`)}`);
+    expect(calls).toContain(`bootstrap gui/501 ${join(fixture.environment.HOME, `Library/LaunchAgents/${COLLECTOR_LABEL}.plist`)}`);
+    expect(result.stdout + result.stderr).not.toContain("never-display-this");
+    expect(readFileSync(join(fixture.root, "scripts/start.sh"), "utf8")).not.toMatch(/npm|install\.sh|rm /);
+  });
+
+  it("leaves already-running installed jobs alone when start is repeated", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = spawnSync("/bin/sh", [join(fixture.root, "scripts/start.sh")], { encoding: "utf8", env: fixture.environment });
+    const calls = readFileSync(fixture.environment.LAUNCHCTL_LOG, "utf8");
+    expect(result.status).toBe(0);
+    expect(calls).not.toMatch(/bootstrap|kickstart|bootout/);
+  });
+
+  it("stops jobs with bootout while preserving installed plist files", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = spawnSync("/bin/sh", [join(fixture.root, "scripts/stop.sh")], { encoding: "utf8", env: fixture.environment });
+    const repeated = spawnSync("/bin/sh", [join(fixture.root, "scripts/stop.sh")], { encoding: "utf8", env: { ...fixture.environment, FAKE_SERVICES_LOADED: "0" } });
+    const calls = readFileSync(fixture.environment.LAUNCHCTL_LOG, "utf8");
+    expect(result.status).toBe(0);
+    expect(repeated.status).toBe(0);
+    expect(calls).toContain(`bootout gui/501/${WEB_LABEL}`);
+    expect(calls).toContain(`bootout gui/501/${COLLECTOR_LABEL}`);
+    expect(existsSync(join(fixture.environment.HOME, `Library/LaunchAgents/${WEB_LABEL}.plist`))).toBe(true);
+    expect(existsSync(join(fixture.environment.HOME, `Library/LaunchAgents/${COLLECTOR_LABEL}.plist`))).toBe(true);
+  });
+
+  it("fails start actionably when services have not been installed", () => {
+    const fixture = statusFixture({ installed: false, nodeOnPath: true });
+    const result = spawnSync("/bin/sh", [join(fixture.root, "scripts/start.sh")], { encoding: "utf8", env: fixture.environment });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Run ./scripts/install.sh first");
+    expect(existsSync(fixture.environment.LAUNCHCTL_LOG)).toBe(false);
   });
 
   it("pins only the reviewed dependency install scripts", () => {
