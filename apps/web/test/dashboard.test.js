@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { applySummaryFilter, compactAlerts, consumableAttention, displayLocation, failureLabel, filterFleet, maintenanceSummary, summarizeFleet, toggleSummaryFilter, tonerChannels } from "../public/view-model.js";
+import { applySummaryFilter, compactAlerts, consumableAttention, displayLocation, failureLabel, filterFleet, historyPresentation, INITIAL_HISTORY_ROWS, maintenanceSummary, summarizeFleet, toggleSummaryFilter, tonerChannels } from "../public/view-model.js";
 
 const printer = (name, normalizedHealth, reachable = true, operationalState = reachable ? normalizedHealth : "offline") => ({ identity: { displayName: name, hostname: `${name}.example.invalid` }, site: { id: "site", name: "Site" }, normalizedHealth, operationalState, reachability: { reachable }, consumables: [], isStale: false });
 
@@ -71,6 +71,23 @@ describe("fleet-card interaction contracts", () => {
     expect(source).toContain('card.addEventListener("click", open)');
     expect(source).toContain('event.key === "Enter" || event.key === " "');
     expect(source).toContain('tonerVisual(printer.consumables, { compact: true })');
+  });
+});
+
+describe("recent history presentation", () => {
+  const history = Array.from({ length: 30 }, (_, index) => ({ id: index }));
+
+  it("limits the initial detail view to twelve recent observations", () => {
+    expect(INITIAL_HISTORY_ROWS).toBe(12);
+    expect(historyPresentation(history)).toEqual({ visible: history.slice(0, 12), remaining: 18 });
+  });
+
+  it("keeps every fetched observation accessible through the expanded presentation", () => {
+    expect(historyPresentation(history, true)).toEqual({ visible: history, remaining: 0 });
+    const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+    expect(source).toContain('fetch(`/api/printers/${encodeURIComponent(id)}/history?limit=30`)');
+    expect(source).toContain('toggle.setAttribute("aria-expanded", String(expanded))');
+    expect(source).toContain('expanded ? "Show fewer"');
   });
 });
 

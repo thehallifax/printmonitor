@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,78 @@ function temporaryDirectory(): string {
   const path = mkdtempSync(join(tmpdir(), "printer-fleet-deployment-"));
   temporaryDirectories.push(path);
   return path;
+}
+
+function writeExecutable(path: string, content: string): void {
+  writeFileSync(path, content);
+  chmodSync(path, 0o755);
+}
+
+function statusFixture({ installed, nodeOnPath }: { installed: boolean; nodeOnPath: boolean }) {
+  const sourceRoot = resolve(testDirectory, "../../..");
+  const root = temporaryDirectory();
+  const home = join(root, "home");
+  const bin = join(root, "bin");
+  const runtimeBin = join(root, "runtime/bin");
+  const launchAgents = join(home, "Library/LaunchAgents");
+  mkdirSync(join(root, "scripts/lib"), { recursive: true });
+  mkdirSync(launchAgents, { recursive: true });
+  mkdirSync(bin);
+  mkdirSync(runtimeBin, { recursive: true });
+  for (const file of ["status.sh", "restart.sh", "update.sh", "project-env.mjs"]) cpSync(join(sourceRoot, "scripts", file), join(root, "scripts", file));
+  cpSync(join(sourceRoot, "scripts/lib/common.sh"), join(root, "scripts/lib/common.sh"));
+  symlinkSync(join(sourceRoot, "node_modules"), join(root, "node_modules"), "dir");
+  writeFileSync(join(root, ".env"), "SNMP_COMMUNITY=never-display-this\nHOST=127.0.0.1\nPORT=3010\n");
+
+  symlinkSync("/usr/bin/awk", join(bin, "awk"));
+  symlinkSync("/usr/bin/dirname", join(bin, "dirname"));
+  symlinkSync("/usr/bin/mktemp", join(bin, "mktemp"));
+  symlinkSync("/bin/cat", join(bin, "cat"));
+  symlinkSync("/bin/rm", join(bin, "rm"));
+  symlinkSync("/bin/rmdir", join(bin, "rmdir"));
+  symlinkSync("/bin/sleep", join(bin, "sleep"));
+  if (nodeOnPath) symlinkSync(process.execPath, join(bin, "node"));
+  symlinkSync(process.execPath, join(runtimeBin, "node"));
+  writeExecutable(join(bin, "uname"), "#!/bin/sh\necho Darwin\n");
+  writeExecutable(join(bin, "id"), "#!/bin/sh\nif [ \"${1:-}\" = -u ]; then echo 501; else echo fixture; fi\n");
+  writeExecutable(join(bin, "launchctl"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$LAUNCHCTL_LOG\"\nif [ \"${1:-}\" = print ] && [ \"${FAKE_SERVICES_INSTALLED:-0}\" = 1 ]; then printf '    state = running\\n    pid = 4321\\n'; exit 0; fi\nif [ \"${1:-}\" = print ]; then exit 1; fi\n");
+  writeExecutable(join(bin, "git"), [
+    "#!/bin/sh",
+    "case \"$*\" in",
+    "  'rev-parse --show-toplevel') echo \"$FIXTURE_ROOT\" ;;",
+    "  'status --porcelain --untracked-files=no') if [ \"${DIRTY_TRACKED:-0}\" = 1 ]; then echo ' M tracked-file'; fi ;;",
+    "  'pull --ff-only') if [ \"${GIT_PULL_FAIL:-0}\" = 1 ]; then echo 'fixture pull failed' >&2; exit 1; fi; echo 'Already up to date.' ;;",
+    "  'rev-parse --short HEAD') echo 6a164cd ;;",
+    "  *) echo \"unexpected git command: $*\" >&2; exit 2 ;;",
+    "esac",
+    ""
+  ].join("\n"));
+  const npmFixture = "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$NPM_LOG\"\necho \"detail: npm $*\"\nif [ \"$*\" = \"${NPM_FAIL_ON:-never}\" ]; then echo 'fixture npm failure' >&2; exit 1; fi\n";
+  writeExecutable(join(runtimeBin, "npm"), npmFixture);
+  if (nodeOnPath) writeExecutable(join(bin, "npm"), npmFixture);
+  writeExecutable(join(bin, "curl"), "#!/bin/sh\necho '{\"status\":\"ok\"}'\n");
+  const plistBuddy = join(bin, "plistbuddy");
+  writeExecutable(plistBuddy, "#!/bin/sh\ncase \"${2:-}\" in\n  *ProgramArguments:0*) printf '%s\\n' \"$FIXTURE_NODE\" ;;\n  *EnvironmentVariables:HOST*) echo 127.0.0.1 ;;\n  *EnvironmentVariables:PORT*) echo 3010 ;;\nesac\n");
+
+  if (installed) {
+    writeFileSync(join(launchAgents, `${WEB_LABEL}.plist`), "fixture\n");
+    writeFileSync(join(launchAgents, `${COLLECTOR_LABEL}.plist`), "fixture\n");
+  }
+
+  return {
+    root,
+    environment: {
+      PATH: bin,
+      HOME: home,
+      PLIST_BUDDY: plistBuddy,
+      NODE_FALLBACK_PATHS: join(root, "missing-node"),
+      FIXTURE_NODE: join(runtimeBin, "node"),
+      FIXTURE_ROOT: root,
+      FAKE_SERVICES_INSTALLED: installed ? "1" : "0",
+      LAUNCHCTL_LOG: join(root, "launchctl.log"),
+      NPM_LOG: join(root, "npm.log")
+    }
+  };
 }
 afterEach(() => {
   while (temporaryDirectories.length) rmSync(temporaryDirectories.pop()!, { recursive: true, force: true });
@@ -85,6 +157,42 @@ describe("project environment loading", () => {
     expect(common).toContain("load_installed_web_address");
     expect(install).toContain("show_effective_configuration");
     expect(status).toContain("show_effective_configuration");
+  });
+
+  it("runs status with Node.js available on PATH without revealing secrets", () => {
+    const fixture = statusFixture({ installed: false, nodeOnPath: true });
+    const result = spawnSync("/bin/sh", [join(fixture.root, "scripts/status.sh")], { encoding: "utf8", env: fixture.environment });
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(result.stdout).toContain("Dashboard: http://127.0.0.1:3010");
+    expect(result.stdout + result.stderr).not.toContain("never-display-this");
+  });
+
+  it("runs status without Node.js on PATH by using the absolute executable in an installed plist", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = spawnSync("/bin/sh", [join(fixture.root, "scripts/status.sh")], { encoding: "utf8", env: fixture.environment });
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(result.stdout).toContain("Web/API: running (pid 4321)");
+    expect(result.stdout).toContain("Collector: running (pid 4321)");
+    expect(result.stdout).toContain("Dashboard: http://127.0.0.1:3010");
+    expect(result.stdout + result.stderr).not.toContain("never-display-this");
+  });
+
+  it("reports an actionable error when neither an installed service nor PATH provides Node.js", () => {
+    const fixture = statusFixture({ installed: false, nodeOnPath: false });
+    const result = spawnSync("/bin/sh", [join(fixture.root, "scripts/status.sh")], { encoding: "utf8", env: fixture.environment });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unable to find a Node.js executable");
+    expect(result.stderr).toContain("Install Node.js 22.12 or newer");
+    expect(result.stderr).not.toContain("command not found");
+    expect(result.stdout + result.stderr).not.toContain("never-display-this");
+  });
+
+  it("resolves npm beside the selected installed Node.js when npm is absent from PATH", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const probe = "node_path=$(resolve_node_executable) && npm_path=$(resolve_npm_executable \"$node_path\") && printf '%s\\n' \"$npm_path\"";
+    const result = spawnSync("/bin/sh", ["-c", `. "${join(fixture.root, "scripts/lib/common.sh")}"; ${probe}`], { encoding: "utf8", env: fixture.environment });
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(result.stdout.trim()).toBe(join(fixture.root, "runtime/bin/npm"));
   });
 
   it.runIf(process.platform === "darwin")("makes install dry-run and status report the repository .env port", () => {
@@ -182,9 +290,90 @@ describe("foreground supervision", () => {
   });
 });
 
+describe("safe application update", () => {
+  function runUpdate(fixture: ReturnType<typeof statusFixture>, options: { args?: string[]; environment?: Record<string, string> } = {}) {
+    return spawnSync("/bin/sh", [join(fixture.root, "scripts/update.sh"), ...(options.args ?? [])], {
+      encoding: "utf8",
+      env: { ...fixture.environment, ...options.environment }
+    });
+  }
+
+  function launchctlCalls(fixture: ReturnType<typeof statusFixture>): string {
+    const path = fixture.environment.LAUNCHCTL_LOG;
+    return existsSync(path) ? readFileSync(path, "utf8") : "";
+  }
+
+  it("updates successfully with Node.js and npm absent from the interactive PATH", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = runUpdate(fixture);
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(result.stdout).toContain("✓ Updated to 6a164cd");
+    expect(result.stdout).toContain("✓ Dependencies installed");
+    expect(result.stdout).toContain("✓ Build passed");
+    expect(result.stdout).toContain("✓ Tests passed");
+    expect(result.stdout).toContain("✓ API healthy");
+    expect(result.stdout).toContain("Dashboard: http://127.0.0.1:3010");
+    expect(readFileSync(fixture.environment.NPM_LOG, "utf8")).toBe("ci\nrun build\ntest\n");
+    expect(result.stdout + result.stderr).not.toContain("never-display-this");
+  });
+
+  it("refuses a dirty tracked worktree without pulling, installing, or restarting", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = runUpdate(fixture, { environment: { DIRTY_TRACKED: "1" } });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("tracked local changes are present");
+    expect(existsSync(fixture.environment.NPM_LOG)).toBe(false);
+    expect(launchctlCalls(fixture)).toBe("");
+  });
+
+  it("does not restart services when git pull fails", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = runUpdate(fixture, { environment: { GIT_PULL_FAIL: "1" } });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("fixture pull failed");
+    expect(result.stderr).toContain("Running services were not restarted");
+    expect(launchctlCalls(fixture)).toBe("");
+  });
+
+  it.each([
+    ["ci", "Dependencies installed"],
+    ["run build", "Build passed"],
+    ["test", "Tests passed"]
+  ])("does not restart services when npm step %s fails", (command, label) => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = runUpdate(fixture, { environment: { NPM_FAIL_ON: command } });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`Update stopped: ${label} failed`);
+    expect(result.stderr).toContain("fixture npm failure");
+    expect(launchctlCalls(fixture)).toBe("");
+  });
+
+  it("restarts both loaded services only after all safe update steps pass", () => {
+    const fixture = statusFixture({ installed: true, nodeOnPath: false });
+    const result = runUpdate(fixture);
+    const calls = launchctlCalls(fixture);
+    expect(result.status).toBe(0);
+    expect(calls).toContain(`kickstart -k gui/501/${WEB_LABEL}`);
+    expect(calls).toContain(`kickstart -k gui/501/${COLLECTOR_LABEL}`);
+    expect(calls).not.toContain("bootout");
+  });
+
+  it("keeps normal output concise and reveals captured detail only with --verbose", () => {
+    const conciseFixture = statusFixture({ installed: true, nodeOnPath: false });
+    const concise = runUpdate(conciseFixture);
+    expect(concise.stdout).not.toContain("detail: npm");
+
+    const verboseFixture = statusFixture({ installed: true, nodeOnPath: false });
+    const verbose = runUpdate(verboseFixture, { args: ["--verbose"] });
+    expect(verbose.status).toBe(0);
+    expect(verbose.stdout).toContain("detail: npm ci");
+    expect(verbose.stdout).toContain("Already up to date.");
+  }, 15_000);
+});
+
 describe("deployment shell entry points", () => {
   const root = resolve(testDirectory, "../../..");
-  const scripts = ["run.sh", "install.sh", "uninstall.sh", "status.sh", "restart.sh"];
+  const scripts = ["run.sh", "install.sh", "uninstall.sh", "status.sh", "restart.sh", "update.sh"];
 
   it.each(scripts)("%s is executable and passes POSIX shell syntax validation", (name) => {
     const path = join(root, "scripts", name);
@@ -199,5 +388,22 @@ describe("deployment shell entry points", () => {
     expect(install).toContain('if [ ! -f "$PROJECT_ROOT/.env" ]');
     expect(install).toContain("--dry-run");
     expect(uninstall).not.toMatch(/rm[^\n]*(?:\.env|inventory\.yaml|data\/)/);
+  });
+
+  it("restarts loaded jobs with launchctl-native kickstart and does not unload them", () => {
+    const restart = readFileSync(join(root, "scripts/restart.sh"), "utf8");
+    expect(restart).toContain("launchctl kickstart -k");
+    expect(restart).toContain("launchctl bootstrap");
+    expect(restart).not.toContain("launchctl bootout");
+  });
+
+  it("pins only the reviewed dependency install scripts", () => {
+    const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    expect(manifest.allowScripts).toEqual({
+      "better-sqlite3@13.0.3": true,
+      "esbuild@0.28.2": true,
+      "fsevents@2.3.3": true
+    });
+    expect(manifest).not.toHaveProperty("dangerouslyAllowAllScripts");
   });
 });

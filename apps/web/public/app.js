@@ -1,4 +1,4 @@
-import { applySummaryFilter, compactAlerts, displayLocation, failureLabel, filterFleet, maintenanceSummary, summarizeFleet, toggleSummaryFilter, tonerChannels } from "./view-model.js";
+import { applySummaryFilter, compactAlerts, displayLocation, failureLabel, filterFleet, historyPresentation, maintenanceSummary, summarizeFleet, toggleSummaryFilter, tonerChannels } from "./view-model.js";
 import { createPageScrollLock } from "./modal-scroll-lock.js";
 
 const compactTemplate = document.querySelector("#compact-card-template");
@@ -139,6 +139,26 @@ function detailTable(headers, rows) {
   table.append(head, body); return table;
 }
 
+function recentHistory(history) {
+  if (!history.length) return element("p", "detail-empty", "No collection history yet.");
+  const wrapper = element("div", "detail-history");
+  const tableHost = element("div");
+  const toggle = element("button", "detail-history-toggle");
+  toggle.type = "button";
+  let expanded = false;
+  const render = () => {
+    const presentation = historyPresentation(history, expanded);
+    tableHost.replaceChildren(detailTable(["Collected", "Reachability", "Health", "Pages", "Supply snapshot"], presentation.visible.map((entry) => [relativeTime(entry.collectedAt), entry.reachable ? "reachable" : "offline", entry.health, entry.totalPages?.toLocaleString(), entry.supplies.map((supply) => `${supply.colour || supply.description} ${supply.levelPercent}%`).slice(0, 4).join(", ")])));
+    toggle.textContent = expanded ? "Show fewer" : `Show ${presentation.remaining} more`;
+    toggle.hidden = !expanded && presentation.remaining === 0;
+    toggle.setAttribute("aria-expanded", String(expanded));
+  };
+  toggle.addEventListener("click", () => { expanded = !expanded; render(); });
+  render();
+  wrapper.append(tableHost, toggle);
+  return wrapper;
+}
+
 async function showDetails(id) {
   detailContent.replaceChildren(element("p", "detail-loading", "Loading stored printer details…"));
   detailScrollLock.lock();
@@ -160,7 +180,7 @@ async function showDetails(id) {
     const toner = tonerVisual(printer.consumables) || element("p", "detail-empty", "Toner levels unavailable.");
     const alerts = printer.alerts.length ? detailTable(["Severity", "Alert"], printer.alerts.map((alert) => [alert.severity, alert.message])) : element("p", "detail-empty", "No current alerts.");
     const counters = factList(Object.entries(printer.counters).map(([name, value]) => [name, value?.toLocaleString()]));
-    const recent = history.length ? detailTable(["Collected", "Reachability", "Health", "Pages", "Supply snapshot"], history.map((entry) => [relativeTime(entry.collectedAt), entry.reachable ? "reachable" : "offline", entry.health, entry.totalPages?.toLocaleString(), entry.supplies.map((supply) => `${supply.colour || supply.description} ${supply.levelPercent}%`).slice(0, 4).join(", ")])) : element("p", "detail-empty", "No collection history yet.");
+    const recent = recentHistory(history);
     detailContent.replaceChildren(title, subtitle, badges, element("h3", "", "Identity"), identity, element("h3", "", "Current state"), current, element("h3", "", "Toner / ink"), toner, element("h3", "", "Complete supply evidence"), supplies, element("h3", "", "Alerts"), alerts, element("h3", "", "Counters"), counters, element("h3", "", "Recent history"), recent);
   } catch (error) {
     detailContent.replaceChildren(element("p", "error-state", error instanceof Error ? error.message : "Stored detail is unavailable"));

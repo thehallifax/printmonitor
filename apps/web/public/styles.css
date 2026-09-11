@@ -108,6 +108,9 @@ main { width: min(calc(100% - 48px), 1800px); margin: 0 auto; padding: 26px 0 64
 .detail-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
 .detail-table th, .detail-table td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .detail-table th { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; }
+.detail-history-toggle { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--surface); color: var(--navy); font: inherit; font-size: .78rem; font-weight: 750; cursor: pointer; }
+.detail-history-toggle:hover { border-color: #aababc; background: #f5f8f8; }
+.detail-history-toggle:focus-visible { outline: 3px solid rgb(31 154 144 / 28%); outline-offset: 2px; }
 
 @media (max-width: 1250px) { .summary-grid { grid-template-columns: repeat(5, 1fr); } }
 @media (max-width: 900px) { .summary-grid { grid-template-columns: repeat(3, 1fr); } .filters { grid-template-columns: 2fr 1fr; } .filters > button { grid-column: 1 / -1; } }

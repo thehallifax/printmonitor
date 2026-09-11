@@ -64,10 +64,11 @@ The installer validates configuration, installs locked dependencies, builds the 
 ```bash
 ./scripts/status.sh
 ./scripts/restart.sh
+./scripts/update.sh
 ./scripts/uninstall.sh
 ```
 
-Uninstall removes only the launchd definitions. Operator configuration, SQLite data, and logs remain in place. See [Deployment](docs/DEPLOYMENT.md) for dry-run installation, service labels, log paths, upgrades, and troubleshooting.
+`update.sh` performs a fast-forward-only pull, locked dependency install, build, tests, safe service restart, and local API health check. It can reuse the Node installation recorded in launchd and derive its matching npm executable, so a fresh shell does not need NVM initialization. Uninstall removes only the launchd definitions; operator configuration, SQLite data, and logs remain in place. See [Deployment](docs/DEPLOYMENT.md) for service labels, log paths, upgrades, and troubleshooting.
 
 ## Foreground mode
 
@@ -133,6 +134,7 @@ npm test
 npm run typecheck
 npm run build
 npm audit
+./scripts/update.sh                       # safe installed-service update
 npm run collect                         # one intentional collection cycle
 npm run collect -- --watch              # background-style watch loop
 npm run validate:printer -- --hostname <name>

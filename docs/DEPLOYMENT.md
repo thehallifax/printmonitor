@@ -54,6 +54,8 @@ Logs are append-only launchd stdout/stderr files under `data/log/`:
 
 `./scripts/status.sh` reports both service states, the configured dashboard URL, and these paths without printing credentials.
 
+Management scripts first reuse the absolute Node executable stored in an installed plist, then check an existing NVM installation and standard Homebrew locations before falling back to the non-interactive command `PATH`. npm is resolved beside that selected Node installation and run with the matching Node directory prepended to `PATH`. They do not source shell profiles, NVM initialization, or Homebrew shell setup.
+
 ## Restart and uninstall
 
 ```bash
@@ -61,25 +63,25 @@ Logs are append-only launchd stdout/stderr files under `data/log/`:
 ./scripts/uninstall.sh
 ```
 
-Restart unloads and reloads both agents so each receives a normal termination signal. Uninstall unloads the agents and removes only their generated plist files. It deliberately preserves `.env`, `config/inventory.yaml`, `data/` (including SQLite), and all logs.
+Restart uses launchd's native `kickstart -k` operation for loaded agents and bootstraps an agent only when its plist is installed but the job is not loaded. This avoids an unload/reload race. Uninstall unloads the agents and removes only their generated plist files. It deliberately preserves `.env`, `config/inventory.yaml`, `data/` (including SQLite), and all logs.
 
 ## Upgrade an existing cacheadmin deployment
 
-Run the upgrade as `cacheadmin`, from the existing checkout. Preserve local configuration before updating application files:
+For normal upgrades after `scripts/update.sh` is present in the checkout, log in as `cacheadmin` and run:
 
 ```bash
-sudo -iu cacheadmin
+~/printmonitor/scripts/update.sh
+```
+
+The updater refuses tracked local modifications, uses `git pull --ff-only`, runs `npm ci`, builds and tests before restarting either service, verifies both launchd jobs, and checks the local API. Use `--verbose` to show successful command output or `--skip-tests` only for an explicitly accepted expedited update. Failures display the captured command output and leave currently running services untouched until the restart stage.
+
+The first upgrade from a version that predates `update.sh` still needs a one-time fast-forward pull from the existing checkout:
+
+```bash
 cd "/absolute/path/to/printmonitor"
 git status --short
 git pull --ff-only
+./scripts/update.sh
 ```
 
-Confirm `.env` contains `INVENTORY_PATH=config/inventory.yaml`, `DATABASE_PATH`, `POLL_INTERVAL_SECONDS`, `HOST`, and the intended `PORT` (3010 is the documented default). Confirm `config/inventory.yaml` exists and contains the real hostname-only inventory. Then run:
-
-```bash
-./scripts/install.sh --dry-run
-./scripts/install.sh
-./scripts/status.sh
-```
-
-Do not copy `.env.example` or `config/inventory.example.yaml` over existing operator files during an upgrade. The installer preserves them automatically.
+Before upgrading, confirm `.env` and `config/inventory.yaml` contain the intended hostname-only production configuration. Never copy their example counterparts over existing operator files. The updater does not reset, clean, stash, or modify `.env`, inventory, SQLite data, logs, or private captures.

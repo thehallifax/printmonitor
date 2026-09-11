@@ -43,6 +43,16 @@ Copy `.env.example` to `.env`, copy `config/inventory.example.yaml` to `config/i
 
 Do not put site-specific inventory or secrets in tracked files. The included inventory, addresses, communities, manufacturers, and serials are fictional.
 
+## Dependency install scripts
+
+npm's project-local `allowScripts` policy approves only the reviewed, pinned install hooks required by the current lockfile:
+
+- `better-sqlite3@13.0.3` builds or selects the native SQLite binding used by storage.
+- `esbuild@0.28.2` validates/selects its platform binary for the TypeScript development toolchain.
+- `fsevents@2.3.3` provides the optional native macOS file-watching binding used by the reload/test toolchain.
+
+Do not replace these approvals with `--ignore-scripts` or a global allow-all setting. After dependency upgrades, run `npm approve-scripts --allow-scripts-pending`, review each newly reported hook, and pin only dependencies whose install behavior is expected.
+
 `INVENTORY_PATH` must name the operator inventory (`config/inventory.yaml` in the template), not `config/inventory.example.yaml`. This prevents a copied `.env` from silently collecting against the fictional example inventory. Relative paths are anchored by the project working directory, which all service scripts set explicitly.
 
 Safety caps are enforced even when environment values are misconfigured: timeout 100–30,000 ms, retries 0–5, concurrency 1–32, and watch interval 10–86,400 seconds.

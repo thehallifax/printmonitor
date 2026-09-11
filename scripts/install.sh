@@ -14,16 +14,17 @@ esac
 require_macos
 require_non_root
 
-for tool in node npm launchctl; do
-  if ! command -v "$tool" >/dev/null 2>&1; then
-    echo "Required tool is missing: $tool" >&2
-    exit 1
-  fi
-done
+if ! command -v launchctl >/dev/null 2>&1; then
+  echo "Required tool is missing: launchctl" >&2
+  exit 1
+fi
 
-NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
-NODE_MINOR=$(node -p 'process.versions.node.split(".")[1]')
-NPM_MAJOR=$(npm --version | awk -F. '{ print $1 }')
+NODE_EXECUTABLE=$(resolve_node_executable) || exit 1
+NPM_EXECUTABLE=$(resolve_npm_executable "$NODE_EXECUTABLE") || exit 1
+
+NODE_MAJOR=$("$NODE_EXECUTABLE" -p 'process.versions.node.split(".")[0]')
+NODE_MINOR=$("$NODE_EXECUTABLE" -p 'process.versions.node.split(".")[1]')
+NPM_MAJOR=$(run_npm "$NODE_EXECUTABLE" "$NPM_EXECUTABLE" --version | awk -F. '{ print $1 }')
 if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 12 ]; }; then
   echo "Node.js 22.12 or newer is required by the locked dependencies." >&2
   exit 1
@@ -33,7 +34,7 @@ if [ "$NPM_MAJOR" -lt 10 ]; then
   exit 1
 fi
 
-NODE_PATH=$(node -p 'process.execPath')
+INSTALLED_NODE_EXECUTABLE=$("$NODE_EXECUTABLE" -p 'process.execPath')
 cd "$PROJECT_ROOT"
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -59,10 +60,10 @@ if [ ! -f "$PROJECT_ROOT/.env" ]; then
   echo "Created .env; set a read-only SNMP community before installing services."
 fi
 
-npm ci
-npm run build
+run_npm "$NODE_EXECUTABLE" "$NPM_EXECUTABLE" ci
+run_npm "$NODE_EXECUTABLE" "$NPM_EXECUTABLE" run build
 
-if ! node "$PROJECT_ROOT/scripts/project-env.mjs" validate "$PROJECT_ROOT"; then
+if ! "$NODE_EXECUTABLE" "$PROJECT_ROOT/scripts/project-env.mjs" validate "$PROJECT_ROOT"; then
   echo "Installation stopped before launchd changes. Update .env and config/inventory.yaml, then rerun this installer." >&2
   exit 1
 fi
@@ -74,7 +75,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-node "$PROJECT_ROOT/scripts/generate-launchd.mjs" "$PROJECT_ROOT" "$NODE_PATH" "$TEMP_DIRECTORY"
+"$NODE_EXECUTABLE" "$PROJECT_ROOT/scripts/generate-launchd.mjs" "$PROJECT_ROOT" "$INSTALLED_NODE_EXECUTABLE" "$TEMP_DIRECTORY"
 install -m 644 "$TEMP_DIRECTORY/$WEB_LABEL.plist" "$WEB_PLIST"
 install -m 644 "$TEMP_DIRECTORY/$COLLECTOR_LABEL.plist" "$COLLECTOR_PLIST"
 

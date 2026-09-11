@@ -9,6 +9,7 @@ WEB_PLIST="$LAUNCH_AGENT_DIRECTORY/$WEB_LABEL.plist"
 COLLECTOR_PLIST="$LAUNCH_AGENT_DIRECTORY/$COLLECTOR_LABEL.plist"
 LOG_DIRECTORY="$PROJECT_ROOT/data/log"
 PLIST_BUDDY=${PLIST_BUDDY:-/usr/libexec/PlistBuddy}
+NODE_FALLBACK_PATHS=${NODE_FALLBACK_PATHS:-"/opt/homebrew/bin/node /usr/local/bin/node"}
 
 require_macos() {
   if [ "$(uname -s)" != "Darwin" ]; then
@@ -60,12 +61,50 @@ resolve_node_executable() {
     printf '%s\n' "$candidate"
     return 0
   fi
+  nvm_candidate=""
+  for candidate in "$HOME"/.nvm/versions/node/*/bin/node; do
+    if [ -x "$candidate" ]; then nvm_candidate=$candidate; fi
+  done
+  if [ -n "$nvm_candidate" ]; then
+    printf '%s\n' "$nvm_candidate"
+    return 0
+  fi
+  for candidate in $NODE_FALLBACK_PATHS; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
   if candidate=$(command -v node 2>/dev/null) && [ -x "$candidate" ]; then
     printf '%s\n' "$candidate"
     return 0
   fi
   echo "Unable to find a Node.js executable. Install Node.js 22.12 or newer, or rerun ./scripts/install.sh from a shell where node is available." >&2
   return 1
+}
+
+resolve_npm_executable() {
+  selected_node=$1
+  selected_node_directory=$(dirname -- "$selected_node")
+  candidate="$selected_node_directory/npm"
+  if [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  if candidate=$(command -v npm 2>/dev/null) && [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  echo "Unable to find npm for $selected_node. Reinstall Node.js with npm, then rerun this command." >&2
+  return 1
+}
+
+run_npm() {
+  selected_node=$1
+  selected_npm=$2
+  shift 2
+  selected_node_directory=$(dirname -- "$selected_node")
+  PATH="$selected_node_directory${PATH:+:$PATH}" "$selected_npm" "$@"
 }
 
 load_installed_web_address() {

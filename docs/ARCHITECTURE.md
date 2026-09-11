@@ -79,6 +79,8 @@ Indexes support latest history lookup, run lookup, and fleet health filtering. S
 
 Every device attempt is inserted unchanged into immutable observation history. When an offline observation lacks identity, supplies, or counters, storage merges the previous successful values only into `latest_printer_state`. The current state therefore shows the failed latest attempt and prior last-seen time alongside clearly marked last-known device data, while the historical failed observation remains unmodified.
 
+Raw observation retention is intentionally unchanged while deployment growth is measured. A five-minute polling interval produces up to 288 observations per active printer per day (2,880 for ten printers), before failed/disabled scheduling effects. Future retention or downsampling should preserve reachability, health, alert, counter, and consumable transitions and keep enough raw evidence for forecasting; it should be based on measured database growth rather than introduced as a presentation shortcut.
+
 ## Fleet lifecycle and ordering
 
 The collector synchronizes validated inventory, polls configured and enabled printers with bounded concurrency, and isolates DNS/SNMP failures per device. Watch mode runs immediately and schedules the next cycle only after the previous cycle finishes. A process-local guard rejects an overlapping run against the same database instance, and shutdown waits for an active cycle before closing SQLite. Disabled or removed entries remain queryable by ID but are excluded from the active fleet.

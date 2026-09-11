@@ -1,4 +1,5 @@
 export const SUMMARY_FILTERS = ["reachable", "offline", "critical", "warning", "pending", "healthy", "low-supplies", "stale"];
+export const INITIAL_HISTORY_ROWS = 12;
 export const TONER_CHANNELS = [
   { key: "black", shortLabel: "K", label: "Black", colour: "#242b2d" },
   { key: "cyan", shortLabel: "C", label: "Cyan", colour: "#008ba8" },
@@ -38,6 +39,11 @@ export function compactAlerts(alerts, maximum = 2) {
   const visibleLimit = alerts.length > maximum ? Math.max(0, maximum - 1) : maximum;
   const visible = alerts.slice(0, visibleLimit);
   return { visible, additional: Math.max(0, alerts.length - visible.length) };
+}
+
+export function historyPresentation(history, expanded = false, initialLimit = INITIAL_HISTORY_ROWS) {
+  const visible = expanded ? history : history.slice(0, initialLimit);
+  return { visible, remaining: Math.max(0, history.length - visible.length) };
 }
 
 export function toggleSummaryFilter(active, requested) {
