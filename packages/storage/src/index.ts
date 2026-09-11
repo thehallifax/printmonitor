@@ -83,7 +83,7 @@ export class FleetDatabase {
     this.db.transaction(() => {
       saveSite.run(site.id, site.name, now, now);
       this.db.prepare("UPDATE printers SET configured=0, enabled=0, updated_at=? WHERE site_id=?").run(now, site.id);
-      for (const printer of printers) savePrinter.run({ ...printer, targetType: printer.targetType ?? (printer.ip ? "ip" : "hostname"), targetValue: printer.targetValue ?? printer.ip ?? printer.hostname, location: printer.location ?? null, enabled: Number(printer.enabled), createdAt: now, updatedAt: now });
+      for (const printer of printers) savePrinter.run({ ...printer, hostname: printer.hostname ?? null, targetType: printer.targetType ?? (printer.ip ? "ip" : "hostname"), targetValue: printer.targetValue ?? printer.ip ?? printer.hostname, location: printer.location ?? null, enabled: Number(printer.enabled), createdAt: now, updatedAt: now });
     })();
   }
 
