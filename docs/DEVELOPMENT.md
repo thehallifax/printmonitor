@@ -1,6 +1,6 @@
 # Development
 
-The commands in this document are developer workflows. Operators use `scripts/install.sh`, `scripts/start.sh`, `scripts/stop.sh`, `scripts/update.sh`, `scripts/status.sh`, `scripts/restart.sh`, and `scripts/uninstall.sh` for the managed launchd lifecycle.
+The commands in this document are developer workflows. macOS operators use the shell scripts under `scripts/` for the managed launchd lifecycle. Windows operators use the PowerShell scripts under `scripts/windows/`; see [Windows deployment](WINDOWS_DEPLOYMENT.md).
 
 ## Setup
 

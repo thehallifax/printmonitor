@@ -136,6 +136,15 @@ describe("project environment loading", () => {
     expect(dashboardUrl(loaded.values)).toBe("http://127.0.0.1:3010");
   });
 
+  it("emits non-secret runtime configuration for deployment tooling", () => {
+    const root = temporaryDirectory();
+    writeFileSync(join(root, ".env"), "HOST=0.0.0.0\nPORT=4010\nDASHBOARD_REDIRECT_URL=\"https://example.invalid/#printers\"\n");
+    const helper = resolve(testDirectory, "../../../scripts/project-env.mjs");
+    const result = spawnSync(process.execPath, [helper, "runtime-config", root], { encoding: "utf8", env: { PATH: process.env.PATH } });
+    expect(result).toMatchObject({ status: 0, stderr: "" });
+    expect(JSON.parse(result.stdout)).toEqual({ host: "0.0.0.0", port: 4010, dashboardUrl: "http://127.0.0.1:4010", dashboardRedirectUrl: "https://example.invalid/#printers", inventoryPath: null, databasePath: null });
+  });
+
   it("accepts a blank redirect and rejects unsafe redirect destinations", () => {
     expect(validateDashboardRedirectUrl("   ")).toBeNull();
     expect(validateDashboardRedirectUrl("https://example.invalid/#printers")).toBeNull();

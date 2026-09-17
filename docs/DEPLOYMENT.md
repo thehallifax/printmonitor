@@ -1,5 +1,7 @@
 # macOS deployment
 
+This document covers macOS launchd deployment. For the native Task Scheduler deployment on Windows 11 and Windows Server 2022/2025, see [Windows deployment](WINDOWS_DEPLOYMENT.md).
+
 Printer Fleet Monitor uses two independent per-user launchd agents: one serves the stored-state API/dashboard, and one runs the collector in watch mode. Both use the same project-root `.env`, inventory, and SQLite path, but launchd supervises and restarts them independently.
 
 ## Fresh installation

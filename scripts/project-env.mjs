@@ -117,6 +117,18 @@ async function main() {
     console.log(configurationSummary(readProjectEnvironment(projectRoot).values).join("\n"));
     return;
   }
+  if (command === "runtime-config") {
+    const values = readProjectEnvironment(projectRoot).values;
+    console.log(JSON.stringify({
+      host: values.HOST || DEFAULT_HOST,
+      port: Number(values.PORT || DEFAULT_PORT),
+      dashboardUrl: dashboardUrl(values),
+      dashboardRedirectUrl: values.DASHBOARD_REDIRECT_URL?.trim() || null,
+      inventoryPath: values.INVENTORY_PATH ? resolveProjectPath(projectRoot, values.INVENTORY_PATH) : null,
+      databasePath: values.DATABASE_PATH ? resolveProjectPath(projectRoot, values.DATABASE_PATH) : null
+    }));
+    return;
+  }
   if (command === "validate") {
     const result = await validateProjectConfiguration(projectRoot);
     if (result.errors.length) {
@@ -128,7 +140,7 @@ async function main() {
     console.log(`Dashboard URL: ${dashboardUrl(result.values)}`);
     return;
   }
-  console.error("Usage: node scripts/project-env.mjs <validate|describe|url> [project-root]");
+  console.error("Usage: node scripts/project-env.mjs <validate|describe|url|runtime-config> [project-root]");
   process.exitCode = 2;
 }
 

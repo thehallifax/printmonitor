@@ -6,6 +6,8 @@ config/inventory.yaml
 data/*.sqlite
 data/*.sqlite-*
 data/log/
+data/run/
+.windows-deployment.json
 data/private/
 coverage/
 .DS_Store

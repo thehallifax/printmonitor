@@ -32,7 +32,7 @@ Production inventory is target-based: each enabled printer has exactly one hostn
 
 Reachability answers whether the latest SNMP attempt received a response. Health describes the normalized condition of a responding device (`healthy`, `warning`, `critical`, or `unknown`). Freshness is independent of both. An active printer without any observation is `pending`, not offline.
 
-The supported single-node runtime is one collector writer and one API/web process sharing a local SQLite database. On macOS, launchd supervises them as independent services, so either can restart without coupling its lifecycle to the other. See [Architecture](docs/ARCHITECTURE.md) for the component and storage boundaries.
+The supported single-node runtime is one collector writer and one API/web process sharing a local SQLite database. On macOS, launchd supervises the processes as independent services. On Windows, two native Task Scheduler tasks provide boot startup and failure recovery without a third-party process manager. See [Architecture](docs/ARCHITECTURE.md) for the component and storage boundaries.
 
 ## Vendor support
 
@@ -65,11 +65,24 @@ cp config/inventory.example.yaml config/inventory.yaml
 
 The installer validates configuration, installs locked dependencies, builds the project, and installs separate per-user launchd agents for the API/web process and collector. It is idempotent and never overwrites an existing `.env`, inventory, database, or log. The documented default is <http://127.0.0.1:3010>; installation and status output use the effective `HOST` and `PORT`.
 
+## Quick start on Windows
+
+Windows 11 and Windows Server 2022/2025 on x64 are supported with Node.js 22.12 or newer, npm 10 or newer, Windows PowerShell 5.1 or PowerShell 7, and Git for updates. Copy `.env.example` to `.env`, copy the example inventory to `config\inventory.yaml`, replace the fictional values, then run the installer from an elevated PowerShell window:
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item config\inventory.example.yaml config\inventory.yaml
+& .\scripts\windows\install.ps1
+& .\scripts\windows\status.ps1
+```
+
+The default loopback listener needs no firewall rule. A non-loopback `HOST` requires an explicit installer choice; see [Windows deployment](docs/WINDOWS_DEPLOYMENT.md) for firewall options, permissions, lifecycle commands, troubleshooting, and the first-machine validation checklist.
+
 ### Dashboard integration
 
 In standalone mode, `GET /` serves the built-in Printer Fleet Monitor dashboard. To integrate with a parent operations or infrastructure dashboard, optionally set `DASHBOARD_REDIRECT_URL` to an absolute `http://` or `https://` URL, for example `http://example.invalid/#printers`. Only the root dashboard route redirects; the local Printer Fleet Monitor API remains available at `/api/...`. Leave the setting unset or blank to retain standalone behavior.
 
-## Operate and update
+## Operate and update on macOS
 
 Installed services run in the background, so Terminal can be closed. They are per-user LaunchAgents and normally start after the installing user logs in following a reboot; they are not pre-login system daemons.
 
@@ -94,6 +107,8 @@ For an existing installation, the canonical update command is:
 
 `update.sh` safely performs the fast-forward-only pull, locked dependency install, build, tests, service restart, status verification, and local API health verification. Normal updates run tests. Use `./scripts/update.sh --verbose` for detailed command output, or use `./scripts/update.sh --skip-tests` only as an explicitly accepted faster path. The scripts resolve Node/npm themselves; do not source NVM or other interactive shell setup. See [Deployment](docs/DEPLOYMENT.md) for service labels, log paths, upgrades, and troubleshooting.
 
+Windows provides equivalent `install.ps1`, `start.ps1`, `stop.ps1`, `restart.ps1`, `status.ps1`, `update.ps1`, `uninstall.ps1`, and `run.ps1` commands under `scripts\windows`. See [Windows deployment](docs/WINDOWS_DEPLOYMENT.md).
+
 ## Foreground run
 
 Run both the API/web process and collector watch loop in one terminal without installing services:
@@ -101,6 +116,8 @@ Run both the API/web process and collector watch loop in one terminal without in
 ```bash
 ./scripts/run.sh
 ```
+
+On Windows, use `& .\scripts\windows\run.ps1` from PowerShell.
 
 This foreground mode is for development or supervised troubleshooting; Terminal must remain open, and it is not required for a normal launchd deployment. `run.sh` safely parses the repository-root `.env` without shell evaluation, forwards `SIGINT`/`SIGTERM`, and stops the other child if either process exits. Exported environment variables override `.env`, which overrides documented defaults. All supported launch paths resolve relative inventory and database paths from the repository root.
 
