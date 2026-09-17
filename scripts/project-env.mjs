@@ -16,7 +16,8 @@ const CONFIG_KEYS = [
   "SNMP_RETRIES",
   "COLLECTOR_CONCURRENCY",
   "HOST",
-  "PORT"
+  "PORT",
+  "DASHBOARD_REDIRECT_URL"
 ];
 
 export function readProjectEnvironment(projectRoot = PROJECT_ROOT, environment = process.env) {
@@ -47,6 +48,18 @@ function boundedInteger(value, minimum, maximum) {
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum;
 }
 
+export function validateDashboardRedirectUrl(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password) return "DASHBOARD_REDIRECT_URL must be a valid absolute HTTP or HTTPS URL without credentials";
+  } catch {
+    return "DASHBOARD_REDIRECT_URL must be a valid absolute HTTP or HTTPS URL";
+  }
+  return null;
+}
+
 export async function validateProjectConfiguration(projectRoot = PROJECT_ROOT, environment = process.env, { validateInventory = true } = {}) {
   const { envPath, values } = readProjectEnvironment(projectRoot, environment);
   const errors = [];
@@ -57,6 +70,8 @@ export async function validateProjectConfiguration(projectRoot = PROJECT_ROOT, e
   if (!values.DATABASE_PATH?.trim()) errors.push("DATABASE_PATH is required");
   if (!values.HOST?.trim()) errors.push("HOST is required");
   if (!boundedInteger(values.PORT ?? "", 1, 65535)) errors.push("PORT must be an integer from 1 to 65535");
+  const dashboardRedirectError = validateDashboardRedirectUrl(values.DASHBOARD_REDIRECT_URL);
+  if (dashboardRedirectError) errors.push(dashboardRedirectError);
   if (!boundedInteger(values.POLL_INTERVAL_SECONDS ?? "", 10, 86400)) errors.push("POLL_INTERVAL_SECONDS must be an integer from 10 to 86400");
   if (!boundedInteger(values.SNMP_TIMEOUT_MS ?? "", 100, 30000)) errors.push("SNMP_TIMEOUT_MS must be an integer from 100 to 30000");
   if (!boundedInteger(values.SNMP_RETRIES ?? "", 0, 5)) errors.push("SNMP_RETRIES must be an integer from 0 to 5");

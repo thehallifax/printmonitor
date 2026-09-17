@@ -71,4 +71,36 @@ describe("stored-state fleet API", () => {
   });
 });
 
+describe("optional dashboard integration redirect", () => {
+  it("serves the built-in dashboard by default", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "printer-fleet-dashboard-")); directories.push(directory);
+    const app = await buildApp({ databasePath: join(directory, "fleet.sqlite"), logger: false });
+    const response = await app.inject({ method: "GET", url: "/" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.body).toContain("Printer Fleet Monitor");
+    await app.close();
+  });
+
+  it("redirects only the root while leaving the API local", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "printer-fleet-dashboard-")); directories.push(directory);
+    const app = await buildApp({ databasePath: join(directory, "fleet.sqlite"), logger: false, dashboardRedirectUrl: "http://example.invalid/#printers" });
+    const root = await app.inject({ method: "GET", url: "/" });
+    expect(root.statusCode).toBe(302);
+    expect(root.headers.location).toBe("http://example.invalid/#printers");
+
+    const health = await app.inject({ method: "GET", url: "/api/health" });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toMatchObject({ service: "printer-fleet-api" });
+    const fleet = await app.inject({ method: "GET", url: "/api/fleet" });
+    expect(fleet.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("rejects malformed or non-HTTP redirect destinations", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "printer-fleet-dashboard-")); directories.push(directory);
+    await expect(buildApp({ databasePath: join(directory, "invalid.sqlite"), logger: false, dashboardRedirectUrl: "javascript:alert(1)" })).rejects.toThrow("DASHBOARD_REDIRECT_URL");
+  });
+});
+
 interface FleetPrinter { identity: { inventoryId: string }; normalizedHealth: string; operationalState: string }

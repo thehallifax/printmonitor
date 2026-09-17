@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { configurationSummary, dashboardUrl, DEFAULT_PORT, readProjectEnvironment, resolveProjectPath, validateProjectConfiguration } from "../../../scripts/project-env.mjs";
+import { configurationSummary, dashboardUrl, DEFAULT_PORT, readProjectEnvironment, resolveProjectPath, validateDashboardRedirectUrl, validateProjectConfiguration } from "../../../scripts/project-env.mjs";
 import { COLLECTOR_LABEL, generateLaunchAgents, WEB_LABEL } from "../../../scripts/generate-launchd.mjs";
 import { supervise } from "../../../scripts/process-supervisor.mjs";
 
@@ -136,6 +136,13 @@ describe("project environment loading", () => {
     expect(dashboardUrl(loaded.values)).toBe("http://127.0.0.1:3010");
   });
 
+  it("accepts a blank redirect and rejects unsafe redirect destinations", () => {
+    expect(validateDashboardRedirectUrl("   ")).toBeNull();
+    expect(validateDashboardRedirectUrl("https://example.invalid/#printers")).toBeNull();
+    expect(validateDashboardRedirectUrl("javascript:alert(1)")).toContain("valid absolute HTTP or HTTPS URL");
+    expect(validateDashboardRedirectUrl("https://user:password@example.invalid")).toContain("without credentials");
+  });
+
   it("reports a wildcard listen address separately from its safe local dashboard URL", () => {
     const root = temporaryDirectory();
     writeFileSync(join(root, ".env"), "HOST=0.0.0.0\nPORT=3010\n");
@@ -248,7 +255,7 @@ describe("launchd definitions", () => {
     const root = join(temporaryDirectory(), "Print Monitor & Fleet");
     const output = temporaryDirectory();
     mkdirSync(root, { recursive: true });
-    writeFileSync(join(root, ".env"), "SNMP_COMMUNITY=never-display-this\nHOST=127.0.0.1\nPORT=3010\nINVENTORY_PATH=config/inventory.yaml\nDATABASE_PATH=data/fleet.sqlite\nPOLL_INTERVAL_SECONDS=300\n");
+    writeFileSync(join(root, ".env"), "SNMP_COMMUNITY=never-display-this\nHOST=127.0.0.1\nPORT=3010\nDASHBOARD_REDIRECT_URL=\"https://example.invalid/#printers\"\nINVENTORY_PATH=config/inventory.yaml\nDATABASE_PATH=data/fleet.sqlite\nPOLL_INTERVAL_SECONDS=300\n");
     const paths = await generateLaunchAgents({ projectRoot: root, nodePath: "/opt/node/bin/node", outputDirectory: output, environment: {} });
     expect(paths.map((path) => path.split("/").pop())).toEqual([`${WEB_LABEL}.plist`, `${COLLECTOR_LABEL}.plist`]);
     const web = readFileSync(paths[0], "utf8");
@@ -262,6 +269,7 @@ describe("launchd definitions", () => {
     expect(web + collector).toContain(`${root}/.env`.replace("&", "&amp;"));
     expect(web + collector).toContain("<key>HOST</key>\n    <string>127.0.0.1</string>");
     expect(web + collector).toContain("<key>PORT</key>\n    <string>3010</string>");
+    expect(web + collector).toContain("<key>DASHBOARD_REDIRECT_URL</key>\n    <string>https://example.invalid/#printers</string>");
     expect(web + collector).not.toContain("SNMP_COMMUNITY");
     expect(web + collector).toContain("<key>KeepAlive</key>");
     const serviceEntry = readFileSync(resolve(testDirectory, "../../../scripts/service-entry.mjs"), "utf8");

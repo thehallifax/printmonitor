@@ -6,7 +6,7 @@ import { readProjectEnvironment } from "./project-env.mjs";
 
 export const WEB_LABEL = "com.printer-fleet-monitor.web";
 export const COLLECTOR_LABEL = "com.printer-fleet-monitor.collector";
-const LAUNCHD_CONFIG_KEYS = ["HOST", "PORT", "INVENTORY_PATH", "DATABASE_PATH", "POLL_INTERVAL_SECONDS", "SNMP_TIMEOUT_MS", "SNMP_RETRIES", "COLLECTOR_CONCURRENCY"];
+const LAUNCHD_CONFIG_KEYS = ["HOST", "PORT", "DASHBOARD_REDIRECT_URL", "INVENTORY_PATH", "DATABASE_PATH", "POLL_INTERVAL_SECONDS", "SNMP_TIMEOUT_MS", "SNMP_RETRIES", "COLLECTOR_CONCURRENCY"];
 
 function xml(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");

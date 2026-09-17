@@ -42,6 +42,7 @@ Copy `.env.example` to `.env`, copy `config/inventory.example.yaml` to `config/i
 - `SNMP_TIMEOUT_MS`, `SNMP_RETRIES`: bounded request behavior.
 - `COLLECTOR_CONCURRENCY`: maximum printers collected concurrently.
 - `HOST`, `PORT`: API listener. The documented application and deployment default is loopback port 3010.
+- `DASHBOARD_REDIRECT_URL`: optional absolute HTTP/HTTPS URL. When set, only `GET /` redirects there; `/api/...` remains local. Blank or unset preserves the built-in dashboard.
 
 Do not put site-specific inventory or secrets in tracked files. The included inventory, addresses, communities, manufacturers, and serials are fictional.
 

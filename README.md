@@ -65,6 +65,10 @@ cp config/inventory.example.yaml config/inventory.yaml
 
 The installer validates configuration, installs locked dependencies, builds the project, and installs separate per-user launchd agents for the API/web process and collector. It is idempotent and never overwrites an existing `.env`, inventory, database, or log. The documented default is <http://127.0.0.1:3010>; installation and status output use the effective `HOST` and `PORT`.
 
+### Dashboard integration
+
+In standalone mode, `GET /` serves the built-in Printer Fleet Monitor dashboard. To integrate with a parent operations or infrastructure dashboard, optionally set `DASHBOARD_REDIRECT_URL` to an absolute `http://` or `https://` URL, for example `http://example.invalid/#printers`. Only the root dashboard route redirects; the local Printer Fleet Monitor API remains available at `/api/...`. Leave the setting unset or blank to retain standalone behavior.
+
 ## Operate and update
 
 Installed services run in the background, so Terminal can be closed. They are per-user LaunchAgents and normally start after the installing user logs in following a reboot; they are not pre-login system daemons.
@@ -137,7 +141,7 @@ The `id` is the printer's stable internal identity. Keep it unchanged to preserv
 
 The explicit `--ip` live-validation option remains diagnostic-only and never creates or modifies inventory. SNMP credentials are read from the environment and are not written to launchd plist files.
 
-Important settings are `SNMP_COMMUNITY`, `INVENTORY_PATH`, `DATABASE_PATH`, `POLL_INTERVAL_SECONDS`, `SNMP_TIMEOUT_MS`, `SNMP_RETRIES`, `COLLECTOR_CONCURRENCY`, `HOST`, and `PORT`. See [.env.example](.env.example) and [Development](docs/DEVELOPMENT.md) for bounds and precedence details.
+Important settings are `SNMP_COMMUNITY`, `INVENTORY_PATH`, `DATABASE_PATH`, `POLL_INTERVAL_SECONDS`, `SNMP_TIMEOUT_MS`, `SNMP_RETRIES`, `COLLECTOR_CONCURRENCY`, `HOST`, `PORT`, and the optional `DASHBOARD_REDIRECT_URL`. See [.env.example](.env.example) and [Development](docs/DEVELOPMENT.md) for bounds and precedence details.
 
 ## Dashboard and detail
 

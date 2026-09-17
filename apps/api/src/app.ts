@@ -9,6 +9,7 @@ export interface AppOptions {
   webRoot?: string;
   logger?: boolean;
   pollIntervalSeconds?: number;
+  dashboardRedirectUrl?: string;
   now?: () => Date;
 }
 
@@ -29,6 +30,21 @@ const boundedLimit = (value: unknown, fallback: number, cap: number): number => 
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, cap) : fallback;
 };
+
+function normalizeDashboardRedirectUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new Error("DASHBOARD_REDIRECT_URL must be a valid absolute HTTP or HTTPS URL");
+  }
+  if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password) {
+    throw new Error("DASHBOARD_REDIRECT_URL must be a valid absolute HTTP or HTTPS URL without credentials");
+  }
+  return trimmed;
+}
 
 function filterPrinters(printers: FleetPrinterState[], query: PrinterQuery): FleetPrinterState[] {
   const search = query.search?.trim().toLowerCase();
@@ -63,11 +79,18 @@ function historyEntry(observation: PrinterObservation) {
 
 export async function buildApp(options: AppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger === false ? false : { base: undefined } });
+  const dashboardRedirectUrl = normalizeDashboardRedirectUrl(options.dashboardRedirectUrl ?? process.env.DASHBOARD_REDIRECT_URL);
   const db = new FleetDatabase(options.databasePath ?? process.env.DATABASE_PATH ?? "data/printer-fleet.sqlite");
   const configuredPollInterval = options.pollIntervalSeconds ?? Number(process.env.POLL_INTERVAL_SECONDS ?? 300);
   const pollIntervalSeconds = Number.isInteger(configuredPollInterval) && configuredPollInterval >= 10 && configuredPollInterval <= 86_400 ? configuredPollInterval : 300;
   const now = options.now ?? (() => new Date());
   app.addHook("onClose", async () => db.close());
+
+  app.addHook("onRequest", async (request, reply) => {
+    if (dashboardRedirectUrl && request.method === "GET" && request.url.split("?", 1)[0] === "/") {
+      return reply.redirect(dashboardRedirectUrl);
+    }
+  });
 
   app.get("/api/health", async () => {
     const databaseHealthy = db.isHealthy();
